@@ -73,3 +73,31 @@ def test_agent_handles_unknown_transaction_id() -> None:
 
     assert "could not find transaction ID TX9999" in response.answer
     assert response.requires_confirmation is False
+
+class FakeTextGenerator:
+    """Fake text generator for testing LLM-assisted response mode."""
+
+    def generate(self, prompt: str) -> str:
+        assert "Use only the provided tool results" in prompt
+        assert "TX1001" in prompt
+        return "LLM-style response based on controlled tool results."
+
+
+def test_agent_can_use_text_generator_for_final_response() -> None:
+    agent = BankingSupportAgent(text_generator=FakeTextGenerator())
+
+    response = agent.handle_request(
+        user_request=(
+            "My QR payment TX1001 was deducted but the merchant did not receive it."
+        ),
+        use_llm=True,
+    )
+
+    assert response.answer == "LLM-style response based on controlled tool results."
+    assert response.requires_confirmation is False
+
+    tool_names = [tool_call.tool_name for tool_call in response.tool_calls]
+
+    assert "check_transaction_status" in tool_names
+    assert "retrieve_policy_context" in tool_names
+    assert "check_dispute_eligibility" in tool_names

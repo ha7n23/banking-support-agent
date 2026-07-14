@@ -16,11 +16,21 @@ from banking_agent.tools.dispute_tools import check_dispute_eligibility
 from banking_agent.tools.policy_tools import retrieve_policy_context
 from banking_agent.tools.transaction_tools import check_transaction_status
 
+from banking_agent.generation.llm_client import TextGenerator
+from banking_agent.generation.prompt_builder import build_agent_response_prompt
+
 
 class BankingSupportAgent:
     """Controlled banking support agent using deterministic routing and tools."""
 
-    def handle_request(self, user_request: str) -> AgentResponse:
+    def __init__(self, text_generator: TextGenerator | None = None) -> None:
+        self.text_generator = text_generator
+
+    def handle_request(
+        self,
+        user_request: str,
+        use_llm: bool = False,
+    ) -> AgentResponse:
         """Handle a user request using safe tool routing."""
         route = route_user_request(user_request)
         tool_calls: list[ToolCallRecord] = []
@@ -92,12 +102,22 @@ class BankingSupportAgent:
             update={"issue_type": effective_issue_type}
         )
 
-        answer = self._build_answer(
-            route=effective_route,
-            policy_context=policy_context,
-            transaction=transaction,
-            eligibility=eligibility,
-        )
+        if use_llm and self.text_generator is not None:
+            prompt = build_agent_response_prompt(
+                user_request=user_request,
+                route=effective_route,
+                policy_context=policy_context,
+                transaction=transaction,
+                eligibility=eligibility,
+            )
+            answer = self.text_generator.generate(prompt)
+        else:
+            answer = self._build_answer(
+                route=effective_route,
+                policy_context=policy_context,
+                transaction=transaction,
+                eligibility=eligibility,
+            )
 
         return AgentResponse(
             user_request=user_request,

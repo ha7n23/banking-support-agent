@@ -15,9 +15,47 @@ This project focuses on the foundations of AI agents:
 - safe banking support workflows
 - tests for tool behaviour
 
+## Run the Agent
+
+Run the default QR dispute example:
+
+```bash
+PYTHONPATH=src python src/banking_agent/runners/run_agent.py
+```
+
+Run a password reset example:
+
+```bash
+PYTHONPATH=src python src/banking_agent/runners/run_agent.py --request "I forgot my mobile banking password."
+```
+
+Run an action request example:
+
+```bash
+PYTHONPATH=src python src/banking_agent/runners/run_agent.py --request "Please raise a dispute for TX1001."
+```
+
+Action requests require confirmation before any ticket would be created.
+
+## Response Modes
+
+The agent supports two response modes.
+
+### Deterministic Mode
+
+```bash
+PYTHONPATH=src python src/banking_agent/runners/run_agent.py
+```
+
+### LLM-Assisted Mode
+
+```bash
+PYTHONPATH=src python src/banking_agent/runners/run_agent.py --use-llm
+```
+
 ## Current Status
 
-Phase 2 complete:
+Phase 3 complete:
 
 - project structure created
 - typed schemas added
@@ -30,7 +68,11 @@ Phase 2 complete:
 - action request detection added
 - controlled agent service added
 - agent runner added
-- unit tests added for tools, routing, and agent behaviour
+- LLM-assisted final response generation added
+- Gemini text generator added
+- safe agent response prompt added
+- deterministic and LLM response modes supported
+- unit tests added for tools, routing, agent behaviour, and prompt building
 
 ## Setup
 

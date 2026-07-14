@@ -2,6 +2,7 @@ from argparse import ArgumentParser
 
 from banking_agent.services.agent_service import BankingSupportAgent
 
+from banking_agent.generation.llm_client import GeminiTextGenerator
 
 DEFAULT_REQUEST = (
     "My QR payment TX1001 was deducted but the merchant did not receive it. "
@@ -22,6 +23,12 @@ def parse_args() -> ArgumentParser:
         help="User banking support request.",
     )
 
+    parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        help="Use Gemini to generate the final customer-facing response.",
+    )
+
     return parser
 
 
@@ -30,8 +37,13 @@ def main() -> None:
     parser = parse_args()
     args = parser.parse_args()
 
-    agent = BankingSupportAgent()
-    response = agent.handle_request(args.request)
+    text_generator = GeminiTextGenerator() if args.use_llm else None
+
+    agent = BankingSupportAgent(text_generator=text_generator)
+    response = agent.handle_request(
+        user_request=args.request,
+        use_llm=args.use_llm,
+    )
 
     print("\n" + "=" * 80)
     print("USER REQUEST")

@@ -15,3 +15,6 @@ class UnsupportedIssueTypeError(ToolError):
 
 class RoutingError(BankingAgentError):
     """Raised when a user request cannot be routed."""
+
+class GenerationError(BankingAgentError):
+    """Raised when final response generation fails."""
