@@ -136,9 +136,44 @@ Example action request with confirmation:
 
 The agent creates a mock dispute ticket only after confirmation.
 
+## Docker
+
+Build the Docker image:
+
+```bash
+docker build -t banking-support-agent .
+```
+
+Run the API without LLM mode:
+
+```bash
+docker run --rm -p 8000:8000 banking-support-agent
+```
+
+Open the API docs:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Run with Gemini support:
+
+```bash
+docker run --rm --env-file .env -p 8000:8000 banking-support-agent
+```
+
+The `.env` file is passed at runtime and is not copied into the Docker image.
+
+The Docker container exposes:
+
+```text
+GET  /health
+POST /support
+```
+
 ## Current Status
 
-Phase 5 complete:
+Phase 6A complete:
 
 - project structure created
 - typed schemas added
@@ -159,7 +194,8 @@ Phase 5 complete:
 - action tool only runs after explicit confirmation
 - FastAPI backend added
 - `/health` and `/support` endpoints added
-- API tests added
+- Docker support added
+- API can run in deterministic mode or LLM-assisted mode inside Docker
 - unit tests added for tools, routing, agent behaviour, prompt building, action gating, and API behaviour
 
 ## Setup
