@@ -75,3 +75,14 @@ class AgentResponse(BaseModel):
     answer: str
     tool_calls: list[ToolCallRecord] = Field(default_factory=list)
     requires_confirmation: bool = False
+
+class AgentRoute(BaseModel):
+    """Routing decision for a user support request."""
+
+    issue_type: IssueType
+    transaction_id: str | None = None
+    needs_transaction_lookup: bool = False
+    needs_policy_context: bool = True
+    needs_dispute_eligibility: bool = False
+    requested_action: str | None = None
+    requires_confirmation: bool = False

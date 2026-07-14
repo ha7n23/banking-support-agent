@@ -12,3 +12,6 @@ class TransactionNotFoundError(ToolError):
 
 class UnsupportedIssueTypeError(ToolError):
     """Raised when an issue type is not supported by the tool."""
+
+class RoutingError(BankingAgentError):
+    """Raised when a user request cannot be routed."""
