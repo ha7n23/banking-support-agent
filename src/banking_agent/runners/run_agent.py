@@ -29,6 +29,12 @@ def parse_args() -> ArgumentParser:
         help="Use Gemini to generate the final customer-facing response.",
     )
 
+    parser.add_argument(
+        "--confirm-action",
+        action="store_true",
+        help="Confirm execution of an action tool such as creating a dispute ticket.",
+    )
+
     return parser
 
 
@@ -43,6 +49,7 @@ def main() -> None:
     response = agent.handle_request(
         user_request=args.request,
         use_llm=args.use_llm,
+        confirm_action=args.confirm_action,
     )
 
     print("\n" + "=" * 80)
@@ -68,6 +75,15 @@ def main() -> None:
     print("REQUIRES CONFIRMATION")
     print("=" * 80)
     print(response.requires_confirmation)
+
+    if response.dispute_ticket is not None:
+        print("\n" + "=" * 80)
+        print("DISPUTE TICKET")
+        print("=" * 80)
+        print(f"Ticket ID: {response.dispute_ticket.ticket_id}")
+        print(f"Transaction ID: {response.dispute_ticket.transaction_id}")
+        print(f"Issue type: {response.dispute_ticket.issue_type}")
+        print(f"Status: {response.dispute_ticket.status}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from banking_agent.core.schemas import (
     AgentRoute,
     DisputeEligibility,
+    DisputeTicket,
     PolicyContext,
     TransactionStatus,
 )
@@ -32,6 +33,19 @@ def format_eligibility_context(eligibility: DisputeEligibility | None) -> str:
         f"Requires human review: {eligibility.requires_human_review}"
     )
 
+def format_action_context(dispute_ticket: DisputeTicket | None) -> str:
+    """Format action tool result for the LLM prompt."""
+    if dispute_ticket is None:
+        return "No dispute ticket was created."
+
+    return (
+        f"Ticket ID: {dispute_ticket.ticket_id}\n"
+        f"Transaction ID: {dispute_ticket.transaction_id}\n"
+        f"Issue type: {dispute_ticket.issue_type}\n"
+        f"Status: {dispute_ticket.status}\n"
+        f"Summary: {dispute_ticket.summary}\n"
+        f"Requires human review: {dispute_ticket.requires_human_review}"
+    )
 
 def build_agent_response_prompt(
     user_request: str,
@@ -39,10 +53,12 @@ def build_agent_response_prompt(
     policy_context: PolicyContext,
     transaction: TransactionStatus | None,
     eligibility: DisputeEligibility | None,
+    dispute_ticket: DisputeTicket | None = None,
 ) -> str:
     """Build a safe prompt for generating a customer-facing agent response."""
     transaction_context = format_transaction_context(transaction)
     eligibility_context = format_eligibility_context(eligibility)
+    action_context = format_action_context(dispute_ticket)
 
     return f"""
 You are a cautious banking support assistant.
@@ -52,8 +68,8 @@ Write a clear, professional response to the customer using only the provided too
 Rules:
 - Use only the provided tool results.
 - Do not invent refund timelines, fees, limits, guarantees, or policy details.
-- Do not claim that a dispute ticket has been created.
-- If the user asks to raise/create/file a dispute, explain that confirmation is required before any ticket is created.
+- Do not claim that a dispute ticket has been created unless the action tool result contains a created ticket.
+- If the user asks to raise/create/file a dispute and no ticket was created, explain that confirmation is required before any ticket is created.
 - If no transaction status is available for a payment-specific issue, ask the customer for the transaction ID.
 - Keep the response concise and helpful.
 - Mention the source policy section when useful.
@@ -77,6 +93,9 @@ Summary: {policy_context.summary}
 
 Dispute eligibility tool result:
 {eligibility_context}
+
+Action tool result:
+{action_context}
 
 Final customer response:
 """.strip()

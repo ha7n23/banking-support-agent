@@ -29,6 +29,11 @@ IssueType = Literal[
     "general",
 ]
 
+TicketStatus = Literal[
+    "created",
+    "not_created",
+]
+
 
 class TransactionStatus(BaseModel):
     """Result returned by the transaction status tool."""
@@ -59,6 +64,16 @@ class DisputeEligibility(BaseModel):
     reason: str
     requires_human_review: bool = False
 
+class DisputeTicket(BaseModel):
+    """Mock dispute ticket created after explicit confirmation."""
+
+    ticket_id: str
+    transaction_id: str
+    issue_type: IssueType
+    status: TicketStatus
+    summary: str
+    requires_human_review: bool = True
+
 
 class ToolCallRecord(BaseModel):
     """Record of a tool call made during an agent run."""
@@ -75,6 +90,7 @@ class AgentResponse(BaseModel):
     answer: str
     tool_calls: list[ToolCallRecord] = Field(default_factory=list)
     requires_confirmation: bool = False
+    dispute_ticket: DisputeTicket | None = None
 
 class AgentRoute(BaseModel):
     """Routing decision for a user support request."""

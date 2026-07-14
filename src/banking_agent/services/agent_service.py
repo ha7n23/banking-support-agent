@@ -1,4 +1,6 @@
 from banking_agent.core.exceptions import (
+    ActionRequiresConfirmationError,
+    DisputeNotEligibleError,
     TransactionNotFoundError,
     UnsupportedIssueTypeError,
 )
@@ -6,6 +8,7 @@ from banking_agent.core.schemas import (
     AgentResponse,
     AgentRoute,
     DisputeEligibility,
+    DisputeTicket,
     IssueType,
     PolicyContext,
     ToolCallRecord,
@@ -19,6 +22,8 @@ from banking_agent.tools.transaction_tools import check_transaction_status
 from banking_agent.generation.llm_client import TextGenerator
 from banking_agent.generation.prompt_builder import build_agent_response_prompt
 
+from banking_agent.tools.action_tools import create_dispute_ticket
+
 
 class BankingSupportAgent:
     """Controlled banking support agent using deterministic routing and tools."""
@@ -30,6 +35,7 @@ class BankingSupportAgent:
         self,
         user_request: str,
         use_llm: bool = False,
+        confirm_action : bool = False,
     ) -> AgentResponse:
         """Handle a user request using safe tool routing."""
         route = route_user_request(user_request)
@@ -37,6 +43,7 @@ class BankingSupportAgent:
 
         transaction: TransactionStatus | None = None
         eligibility: DisputeEligibility | None = None
+        dispute_ticket: DisputeTicket | None = None
 
         if route.needs_transaction_lookup and route.transaction_id:
             try:
@@ -98,6 +105,34 @@ class BankingSupportAgent:
             except UnsupportedIssueTypeError:
                 eligibility = None
 
+        if (
+            route.requested_action == "create_dispute_ticket"
+            and confirm_action
+            and transaction is not None
+            and eligibility is not None
+        ):
+            try:
+                dispute_ticket = create_dispute_ticket(
+                    transaction=transaction,
+                    eligibility=eligibility,
+                    customer_confirmed=True,
+                )
+                tool_calls.append(
+                    ToolCallRecord(
+                        tool_name="create_dispute_ticket",
+                        input_summary=(
+                            f"transaction_id={transaction.transaction_id}, "
+                            f"confirmed={confirm_action}"
+                        ),
+                        output_summary=(
+                            f"ticket_id={dispute_ticket.ticket_id}, "
+                            f"status={dispute_ticket.status}"
+                        ),
+                    )
+                )
+            except (ActionRequiresConfirmationError, DisputeNotEligibleError):
+                dispute_ticket = None
+
         effective_route = route.model_copy(
             update={"issue_type": effective_issue_type}
         )
@@ -109,6 +144,7 @@ class BankingSupportAgent:
                 policy_context=policy_context,
                 transaction=transaction,
                 eligibility=eligibility,
+                dispute_ticket=dispute_ticket,
             )
             answer = self.text_generator.generate(prompt)
         else:
@@ -117,13 +153,21 @@ class BankingSupportAgent:
                 policy_context=policy_context,
                 transaction=transaction,
                 eligibility=eligibility,
+                dispute_ticket=dispute_ticket,
             )
+
+        requires_confirmation = (
+            route.requires_confirmation
+            and dispute_ticket is None
+            and not confirm_action
+        )
 
         return AgentResponse(
             user_request=user_request,
             answer=answer,
             tool_calls=tool_calls,
-            requires_confirmation=route.requires_confirmation,
+            requires_confirmation=requires_confirmation,
+            dispute_ticket=dispute_ticket,
         )
 
 
@@ -133,6 +177,7 @@ class BankingSupportAgent:
         policy_context: PolicyContext,
         transaction: TransactionStatus | None,
         eligibility: DisputeEligibility | None,
+        dispute_ticket: DisputeTicket | None = None,
     ) -> str:
         """Build a deterministic support response from route and tool results."""
         parts: list[str] = []
@@ -180,7 +225,14 @@ class BankingSupportAgent:
                 "policy context."
             )
 
-        if route.requires_confirmation:
+        if dispute_ticket is not None:
+            parts.append(
+                f"A mock dispute ticket has been created with ID "
+                f"{dispute_ticket.ticket_id}. The ticket status is "
+                f"{dispute_ticket.status}."
+            )
+
+        if route.requires_confirmation and dispute_ticket is None:
             parts.append(
                 "You asked to create or raise a dispute. This would be an action, "
                 "so confirmation would be required before creating any ticket."

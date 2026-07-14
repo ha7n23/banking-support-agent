@@ -101,3 +101,60 @@ def test_agent_can_use_text_generator_for_final_response() -> None:
     assert "check_transaction_status" in tool_names
     assert "retrieve_policy_context" in tool_names
     assert "check_dispute_eligibility" in tool_names
+
+def test_agent_does_not_create_ticket_without_confirmation() -> None:
+    agent = BankingSupportAgent()
+
+    response = agent.handle_request("Please raise a dispute for TX1001.")
+
+    assert response.requires_confirmation is True
+    assert response.dispute_ticket is None
+
+    tool_names = [tool_call.tool_name for tool_call in response.tool_calls]
+
+    assert "create_dispute_ticket" not in tool_names
+
+
+def test_agent_creates_ticket_when_action_confirmed() -> None:
+    agent = BankingSupportAgent()
+
+    response = agent.handle_request(
+        user_request="Please raise a dispute for TX1001.",
+        confirm_action=True,
+    )
+
+    assert response.requires_confirmation is False
+    assert response.dispute_ticket is not None
+    assert response.dispute_ticket.ticket_id == "DSP-TX1001"
+    assert "mock dispute ticket has been created" in response.answer
+
+    tool_names = [tool_call.tool_name for tool_call in response.tool_calls]
+
+    assert "check_transaction_status" in tool_names
+    assert "retrieve_policy_context" in tool_names
+    assert "check_dispute_eligibility" in tool_names
+    assert "create_dispute_ticket" in tool_names
+
+
+def test_agent_llm_prompt_receives_created_ticket_when_confirmed() -> None:
+    class FakeTicketAwareTextGenerator:
+        """Fake generator that checks created ticket context is in the prompt."""
+
+        def generate(self, prompt: str) -> str:
+            assert "Action tool result:" in prompt
+            assert "Ticket ID: DSP-TX1001" in prompt
+            assert "Status: created" in prompt
+            return "A dispute ticket has been created after confirmation."
+
+    agent = BankingSupportAgent(text_generator=FakeTicketAwareTextGenerator())
+
+    response = agent.handle_request(
+        user_request="Please raise a dispute for TX1001.",
+        use_llm=True,
+        confirm_action=True,
+    )
+
+    assert response.answer == "A dispute ticket has been created after confirmation."
+    assert response.requires_confirmation is False
+    assert response.dispute_ticket is not None
+    assert response.dispute_ticket.ticket_id == "DSP-TX1001" 

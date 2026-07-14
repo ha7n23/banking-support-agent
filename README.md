@@ -53,9 +53,92 @@ PYTHONPATH=src python src/banking_agent/runners/run_agent.py
 PYTHONPATH=src python src/banking_agent/runners/run_agent.py --use-llm
 ```
 
+## Confirmation-Gated Actions
+
+The agent separates read-only tools from action tools.
+
+Read-only and decision-support tools can run automatically:
+
+- check transaction status
+- retrieve policy context
+- check dispute eligibility
+
+Action tools require explicit confirmation:
+
+- create dispute ticket
+
+Example without confirmation:
+
+```bash
+PYTHONPATH=src python src/banking_agent/runners/run_agent.py --request "Please raise a dispute for TX1001."
+```
+
+The agent checks the transaction and eligibility but does not create a ticket.
+
+Example with confirmation:
+
+```bash
+PYTHONPATH=src python src/banking_agent/runners/run_agent.py --request "Please raise a dispute for TX1001." --confirm-action
+```
+
+## Run the API
+
+Start the FastAPI server:
+
+```bash
+PYTHONPATH=src uvicorn banking_agent.api.app:app --reload
+```
+
+Open the interactive API docs:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Available endpoints:
+
+```text
+GET  /health
+POST /support
+```
+
+Example support request:
+
+```json
+{
+  "user_request": "My QR payment TX1001 was deducted but the merchant did not receive it. What should I do?",
+  "use_llm": false,
+  "confirm_action": false
+}
+```
+
+Example action request without confirmation:
+
+```json
+{
+  "user_request": "Please raise a dispute for TX1001.",
+  "use_llm": false,
+  "confirm_action": false
+}
+```
+
+The agent investigates the case but does not create a ticket.
+
+Example action request with confirmation:
+
+```json
+{
+  "user_request": "Please raise a dispute for TX1001.",
+  "use_llm": false,
+  "confirm_action": true
+}
+```
+
+The agent creates a mock dispute ticket only after confirmation.
+
 ## Current Status
 
-Phase 3 complete:
+Phase 5 complete:
 
 - project structure created
 - typed schemas added
@@ -72,7 +155,12 @@ Phase 3 complete:
 - Gemini text generator added
 - safe agent response prompt added
 - deterministic and LLM response modes supported
-- unit tests added for tools, routing, agent behaviour, and prompt building
+- confirmation-gated mock dispute ticket action added
+- action tool only runs after explicit confirmation
+- FastAPI backend added
+- `/health` and `/support` endpoints added
+- API tests added
+- unit tests added for tools, routing, agent behaviour, prompt building, action gating, and API behaviour
 
 ## Setup
 
