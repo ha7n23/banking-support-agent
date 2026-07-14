@@ -171,9 +171,25 @@ GET  /health
 POST /support
 ```
 
+## Continuous Integration
+
+This project uses GitHub Actions for CI.
+
+On every push and pull request, the workflow:
+
+- installs Python dependencies
+- runs the pytest test suite
+- builds the Docker image
+
+Workflow file:
+
+```text
+.github/workflows/ci.yml
+```
+
 ## Current Status
 
-Phase 6A complete:
+Phase 6B complete:
 
 - project structure created
 - typed schemas added
@@ -196,6 +212,8 @@ Phase 6A complete:
 - `/health` and `/support` endpoints added
 - Docker support added
 - API can run in deterministic mode or LLM-assisted mode inside Docker
+- GitHub Actions CI added
+- CI runs tests and validates Docker image build
 - unit tests added for tools, routing, agent behaviour, prompt building, action gating, and API behaviour
 
 ## Setup
