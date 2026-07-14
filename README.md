@@ -17,7 +17,7 @@ This project focuses on the foundations of AI agents:
 
 ## Current Status
 
-Phase 1 complete:
+Phase 2 complete:
 
 - project structure created
 - typed schemas added
@@ -25,7 +25,12 @@ Phase 1 complete:
 - mock transaction status tool added
 - mock policy context tool added
 - mock dispute eligibility tool added
-- unit tests added for tools
+- deterministic issue router added
+- transaction ID extraction added
+- action request detection added
+- controlled agent service added
+- agent runner added
+- unit tests added for tools, routing, and agent behaviour
 
 ## Setup
 
