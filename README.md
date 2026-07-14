@@ -526,4 +526,4 @@ Potential next improvements:
 - add persistent ticket storage
 - add LangGraph-style workflow orchestration
 - add human approval UI for action confirmation
-- add observability and structured logs
+- add observability and structured logs.
