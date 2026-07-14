@@ -15,6 +15,13 @@ This project focuses on the foundations of AI agents:
 - safe banking support workflows
 - tests for tool behaviour
 
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [API Examples](docs/API_EXAMPLES.md)
+- [Safety Model](docs/SAFETY_MODEL.md)
+- [Design Decisions](docs/DESIGN_DECISIONS.md)
+
 ## Run the Agent
 
 Run the default QR dispute example:
@@ -189,32 +196,21 @@ Workflow file:
 
 ## Current Status
 
-Phase 6B complete:
+Phase 7A complete:
 
-- project structure created
-- typed schemas added
-- custom exceptions added
-- mock transaction status tool added
-- mock policy context tool added
-- mock dispute eligibility tool added
+- typed mock tools added
 - deterministic issue router added
-- transaction ID extraction added
-- action request detection added
 - controlled agent service added
-- agent runner added
 - LLM-assisted final response generation added
-- Gemini text generator added
-- safe agent response prompt added
-- deterministic and LLM response modes supported
 - confirmation-gated mock dispute ticket action added
-- action tool only runs after explicit confirmation
 - FastAPI backend added
-- `/health` and `/support` endpoints added
 - Docker support added
-- API can run in deterministic mode or LLM-assisted mode inside Docker
 - GitHub Actions CI added
-- CI runs tests and validates Docker image build
-- unit tests added for tools, routing, agent behaviour, prompt building, action gating, and API behaviour
+- architecture documentation added
+- API examples added
+- safety model documented
+- design decisions documented
+- tests and Docker build passing in CI
 
 ## Setup
 
