@@ -31,12 +31,13 @@ from banking_agent.core.exceptions import (
 
 from banking_agent.core.schemas import (
     AgentResponse,
+    IssueType,
     SupportWorkflow,
     WorkflowEvent,
 )
 
 from banking_agent.services.workflow_service import InMemoryWorkflowService
-from typing import NoReturn
+from typing import NoReturn, cast, get_args
 from banking_agent.routing.router import route_user_request
 
 
@@ -78,6 +79,47 @@ def to_support_response(
         workflow_status=workflow_status,
     )
 
+def parse_issue_type_from_text(text: str) -> IssueType | None:
+    """Parse an issue_type value from a tool call summary."""
+    marker = "issue_type="
+
+    if marker not in text:
+        return None
+
+    raw_value = text.split(marker, maxsplit=1)[1]
+    value = raw_value.split(",", maxsplit=1)[0].strip()
+
+    if value in get_args(IssueType):
+        return cast(IssueType, value)
+
+    return None
+
+
+def infer_workflow_issue_type(
+    response: AgentResponse,
+    fallback_issue_type: IssueType,
+) -> IssueType:
+    """Infer the most accurate issue type for workflow tracking."""
+    if response.dispute_ticket is not None:
+        return response.dispute_ticket.issue_type
+
+    for tool_call in response.tool_calls:
+        parsed_issue_type = parse_issue_type_from_text(
+            tool_call.input_summary
+        )
+
+        if parsed_issue_type is not None:
+            return parsed_issue_type
+
+        parsed_issue_type = parse_issue_type_from_text(
+            tool_call.output_summary
+        )
+
+        if parsed_issue_type is not None:
+            return parsed_issue_type
+
+    return fallback_issue_type
+
 def create_workflow_from_agent_response(
     user_request: str,
     response: AgentResponse,
@@ -95,6 +137,11 @@ def create_workflow_from_agent_response(
 
     route = route_user_request(user_request)
 
+    workflow_issue_type = infer_workflow_issue_type(
+        response=response,
+        fallback_issue_type=route.issue_type,
+    )
+
     recommended_action = route.requested_action
 
     if response.dispute_ticket is not None:
@@ -102,11 +149,7 @@ def create_workflow_from_agent_response(
 
     workflow = workflow_service.create_workflow(
         user_request=user_request,
-        issue_type=(
-            response.dispute_ticket.issue_type
-            if response.dispute_ticket is not None
-            else route.issue_type
-        ),
+        issue_type=workflow_issue_type,
         transaction_id=(
             response.dispute_ticket.transaction_id
             if response.dispute_ticket is not None

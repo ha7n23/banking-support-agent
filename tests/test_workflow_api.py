@@ -237,6 +237,7 @@ def test_support_endpoint_creates_workflow_when_confirmation_required(
 
     assert workflow_data["status"] == "awaiting_confirmation"
     assert workflow_data["recommended_action"] == "create_dispute_ticket"
+    assert workflow_data["issue_type"] == "qr_payment_dispute"
 
 
 def test_support_endpoint_completed_action_creates_completed_workflow(
