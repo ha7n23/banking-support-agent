@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Banking Support Workflow Agent</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <p class="eyebrow">AI Workflow Automation Demo</p>
+      <h1>Banking Support Workflow Agent</h1>
+      <p class="subtitle">
+        A controlled support agent that uses tools, creates workflows,
+        requires confirmation, executes approved actions, and records audit events.
+      </p>
+    </section>
+
+    <section class="layout">
+      <section class="panel">
+        <h2>Support request</h2>
+
+        <form id="support-form">
+          <label for="user-request">Customer request</label>
+          <textarea
+            id="user-request"
+            rows="5"
+            required
+          >Please raise a dispute for TX1001.</textarea>
+
+          <div class="examples">
+            <button type="button" class="example-chip">Please raise a dispute for TX1001.</button>
+            <button type="button" class="example-chip">I forgot my mobile banking password.</button>
+            <button type="button" class="example-chip">My card was charged twice for CARD2002.</button>
+          </div>
+
+          <label class="checkbox">
+            <input id="use-llm" type="checkbox" />
+            Use live LLM response
+          </label>
+
+          <label class="checkbox">
+            <input id="confirm-action" type="checkbox" />
+            Confirm action immediately
+          </label>
+
+          <button type="submit" id="submit-button">Run support agent</button>
+        </form>
+
+        <div class="button-row">
+          <button type="button" id="refresh-workflows-button" class="secondary-button">
+            Refresh workflows
+          </button>
+        </div>
+      </section>
+
+      <section class="panel result-panel">
+        <div class="result-header">
+          <h2>Agent result</h2>
+          <span id="status-pill" class="status-pill">Ready</span>
+        </div>
+
+        <div id="error-box" class="error-box hidden"></div>
+
+        <article class="card">
+          <h3>Answer</h3>
+          <p id="answer-text" class="muted">
+            Submit a request to see the support agent response.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>Workflow</h3>
+          <div id="workflow-summary" class="empty-state">No workflow yet.</div>
+          <div class="button-row">
+            <button type="button" id="execute-workflow-button" class="secondary-button" disabled>
+              Execute workflow
+            </button>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Tool calls</h3>
+          <div id="tool-calls-list" class="empty-state">No tool calls yet.</div>
+        </article>
+
+        <article class="card">
+          <h3>Audit events</h3>
+          <div id="events-list" class="empty-state">No audit events yet.</div>
+        </article>
+      </section>
+    </section>
+
+    <section class="panel workflows-panel">
+      <div class="result-header">
+        <h2>Workflow queue</h2>
+        <span class="muted">In-memory demo state</span>
+      </div>
+      <div id="workflows-list" class="empty-state">No workflows loaded yet.</div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
