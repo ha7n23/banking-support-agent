@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from datetime import datetime
+
 
 TransactionChannel = Literal["qr", "card", "mobile_app", "unknown"]
 
@@ -32,6 +34,27 @@ IssueType = Literal[
 TicketStatus = Literal[
     "created",
     "not_created",
+]
+
+WorkflowStatus = Literal[
+    "created",
+    "awaiting_confirmation",
+    "approved",
+    "completed",
+    "rejected",
+    "failed",
+]
+
+
+WorkflowEventType = Literal[
+    "workflow_created",
+    "intent_classified",
+    "tool_called",
+    "confirmation_required",
+    "user_confirmed",
+    "action_completed",
+    "action_rejected",
+    "workflow_failed",
 ]
 
 
@@ -102,3 +125,30 @@ class AgentRoute(BaseModel):
     needs_dispute_eligibility: bool = False
     requested_action: str | None = None
     requires_confirmation: bool = False
+
+class SupportWorkflow(BaseModel):
+    """State record for a support automation workflow."""
+
+    workflow_id: str
+    user_request: str
+    customer_id: str | None = None
+    issue_type: IssueType
+    transaction_id: str | None = None
+    status: WorkflowStatus
+    requires_confirmation: bool = False
+    recommended_action: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    failure_reason: str | None = None
+    dispute_ticket_id: str | None = None
+
+
+class WorkflowEvent(BaseModel):
+    """Audit event created during a support workflow."""
+
+    event_id: str
+    workflow_id: str
+    event_type: WorkflowEventType
+    message: str
+    created_at: datetime
+    metadata: dict[str, str] = Field(default_factory=dict)

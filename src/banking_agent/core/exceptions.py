@@ -28,3 +28,11 @@ class ActionRequiresConfirmationError(ToolError):
 
 class DisputeNotEligibleError(ToolError):
     """Raised when a dispute ticket cannot be created because the case is not eligible."""
+    
+
+class WorkflowNotFoundError(BankingAgentError):
+    """Raised when a workflow ID does not exist."""
+
+
+class InvalidWorkflowTransitionError(BankingAgentError):
+    """Raised when a workflow status transition is not allowed."""
