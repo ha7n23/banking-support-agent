@@ -2,9 +2,9 @@
 
 ![CI](https://github.com/ha7n23/banking-support-agent/actions/workflows/ci.yml/badge.svg)
 
-A controlled tool-using banking support agent built with Python, FastAPI, typed mock tools, optional Gemini response generation, confirmation-gated actions, Docker, and GitHub Actions CI.
+A controlled banking support agent and workflow automation demo built with Python, FastAPI, typed mock tools, optional Gemini response generation, confirmation-gated actions, audit events, a lightweight browser UI, Docker, and GitHub Actions CI.
 
-This project demonstrates how an AI agent can support banking and fintech customer service workflows while keeping tool execution safe, testable, and controlled.
+This project demonstrates a safer way to build tool-using AI systems for banking and fintech workflows. The LLM does not freely execute tools. Python controls routing, tool execution, workflow state, confirmation gates, and audit events. Gemini can optionally be used only to write the final customer-facing response from completed tool results.
 
 ## Project Summary
 
@@ -16,59 +16,72 @@ The agent can handle support requests such as:
 - refund timeline questions
 - dispute ticket action requests
 
-The core idea is:
+The project now includes a workflow automation layer. When a user requests an action, such as raising a dispute, the system can create a workflow, return a workflow ID, record audit events, wait for confirmation, execute the approved action, and mark the workflow as completed.
+
+Core idea:
 
 ```text
-Python controls routing and tool execution.
-Tools provide structured facts and actions.
-Gemini optionally writes the final customer-facing response.
-Action tools require explicit confirmation.
+Python controls routing, tools, workflow state, and approval gates.
+Tools provide structured facts and controlled actions.
+Gemini optionally writes the final response from completed tool results.
+Workflow events preserve an audit trail.
 ```
-
-This is intentionally safer than a fully autonomous agent because banking workflows require predictable behaviour, validation, and confirmation before actions are performed.
 
 ## Why This Project Matters
 
-Many agent demos allow the LLM to decide everything. That can be risky in domains like banking.
+Many AI agent demos allow the model to decide what to do and when to call tools. That is risky for banking-style workflows where actions should be predictable, auditable, and confirmation-gated.
 
 This project demonstrates a safer pattern:
 
 ```text
 Read-only tools can run automatically.
 Decision-support tools can run automatically.
-Action tools require confirmation.
+Action tools require explicit confirmation.
+Workflow actions are tracked through state and audit events.
 ```
 
-For example, the agent can automatically check a transaction status or dispute eligibility, but it cannot create a dispute ticket unless `confirm_action=true`.
+For example, the agent can automatically check a transaction status, retrieve policy context, and check dispute eligibility. It cannot create a dispute ticket unless the user confirms the action or the workflow is explicitly executed after approval.
 
 ## Key Features
 
 - Deterministic issue routing
 - Transaction ID extraction
-- Mock transaction status tool
-- Mock policy context tool
-- Mock dispute eligibility tool
-- Confirmation-gated mock dispute ticket action
+- Typed mock banking tools
 - Optional Gemini-generated final responses
-- Deterministic fallback mode without LLM
-- FastAPI backend
-- Docker support
-- GitHub Actions CI
+- Deterministic fallback mode without LLM calls
+- Confirmation-gated mock dispute ticket creation
+- Workflow state tracking
+- Workflow listing and inspection endpoints
+- Workflow confirmation, rejection, execution, completion, and failure endpoints
+- Audit event logging for workflow actions
+- Lightweight FastAPI browser UI at `/ui`
+- FastAPI backend with typed request and response schemas
+- Docker-optimised runtime using `requirements-docker.txt`
+- GitHub Actions CI with Python tests, Docker build cache, and Docker smoke tests
 - Unit and API tests
-- Portfolio documentation
+- Professional project documentation
 
 ## Architecture
 
 ```text
-User Request
-↓
-Deterministic Router
-↓
-Safe Tool Execution
-↓
-Optional Gemini Response Writer
-↓
-Final Agent Response
+Browser UI / API Client
+        ↓
+FastAPI API Layer
+        ↓
+Support Agent Service
+        ├── deterministic router
+        ├── read-only tools
+        ├── decision-support tools
+        ├── confirmation-gated action tools
+        └── optional Gemini response writer
+        ↓
+Workflow Automation Layer
+        ├── workflow state
+        ├── status transitions
+        ├── action execution
+        └── audit events
+        ↓
+Structured API Response
 ```
 
 The LLM does not control tools directly. It only writes the final response from completed tool results when LLM-assisted mode is enabled.
@@ -77,6 +90,7 @@ The LLM does not control tools directly. It only writes the final response from 
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [API Examples](docs/API_EXAMPLES.md)
+- [Workflow Automation](docs/WORKFLOW_AUTOMATION.md)
 - [Safety Model](docs/SAFETY_MODEL.md)
 - [Design Decisions](docs/DESIGN_DECISIONS.md)
 
@@ -87,6 +101,8 @@ The LLM does not control tools directly. It only writes the final response from 
 - Uvicorn
 - Pydantic
 - Google Gemini
+- Jinja2
+- HTML/CSS/JavaScript
 - Pytest
 - Docker
 - GitHub Actions
@@ -96,16 +112,18 @@ The LLM does not control tools directly. It only writes the final response from 
 ```text
 banking-support-agent/
   docs/
-    ARCHITECTURE.md
     API_EXAMPLES.md
-    SAFETY_MODEL.md
+    ARCHITECTURE.md
     DESIGN_DECISIONS.md
+    SAFETY_MODEL.md
+    WORKFLOW_AUTOMATION.md
 
   src/
     banking_agent/
       api/
         app.py
         dependencies.py
+        frontend_routes.py
         routes.py
         schemas.py
 
@@ -123,6 +141,7 @@ banking-support-agent/
 
       services/
         agent_service.py
+        workflow_service.py
 
       tools/
         action_tools.py
@@ -130,12 +149,20 @@ banking-support-agent/
         policy_tools.py
         transaction_tools.py
 
+      web/
+        templates/
+          index.html
+        static/
+          app.js
+          styles.css
+
       runners/
         run_agent.py
 
   tests/
   Dockerfile
   requirements.txt
+  requirements-docker.txt
   pytest.ini
   pyrightconfig.json
   .env.example
@@ -144,75 +171,7 @@ banking-support-agent/
   README.md
 ```
 
-## Tool Safety Model
-
-The project separates tools into three categories.
-
-### Read-Only Tools
-
-These can run automatically because they only retrieve information:
-
-```text
-check_transaction_status
-retrieve_policy_context
-```
-
-### Decision-Support Tools
-
-These can run automatically because they apply rules but do not change system state:
-
-```text
-check_dispute_eligibility
-```
-
-### Action Tools
-
-These require explicit confirmation:
-
-```text
-create_dispute_ticket
-```
-
-A dispute ticket is only created when:
-
-```text
-user requested a dispute action
-transaction was checked
-eligibility was checked
-case is eligible
-confirm_action is true
-```
-
-## Example Agent Flow
-
-User request:
-
-```text
-Please raise a dispute for TX1001.
-```
-
-Without confirmation:
-
-```text
-1. Extract transaction ID: TX1001
-2. Check transaction status
-3. Retrieve QR dispute policy
-4. Check dispute eligibility
-5. Ask for confirmation
-6. Do not create a ticket
-```
-
-With confirmation:
-
-```text
-1. Extract transaction ID: TX1001
-2. Check transaction status
-3. Retrieve QR dispute policy
-4. Check dispute eligibility
-5. Create mock dispute ticket
-```
-
-## Setup
+## Run Locally
 
 Create and activate a virtual environment:
 
@@ -238,179 +197,33 @@ GEMINI_MODEL=gemini-2.5-flash
 
 The `.env` file is ignored by Git and should not be committed.
 
-## Run the Agent from CLI
-
-Run the default QR dispute example:
-
-```bash
-PYTHONPATH=src python src/banking_agent/runners/run_agent.py
-```
-
-Run a password reset example:
-
-```bash
-PYTHONPATH=src python src/banking_agent/runners/run_agent.py --request "I forgot my mobile banking password."
-```
-
-Run an action request without confirmation:
-
-```bash
-PYTHONPATH=src python src/banking_agent/runners/run_agent.py --request "Please raise a dispute for TX1001."
-```
-
-Expected behaviour:
-
-```text
-requires_confirmation = True
-no dispute ticket is created
-```
-
-Run an action request with confirmation:
-
-```bash
-PYTHONPATH=src python src/banking_agent/runners/run_agent.py --request "Please raise a dispute for TX1001." --confirm-action
-```
-
-Expected behaviour:
-
-```text
-requires_confirmation = False
-mock dispute ticket is created
-ticket_id = DSP-TX1001
-```
-
-## Response Modes
-
-The agent supports two response modes.
-
-### Deterministic Mode
-
-```bash
-PYTHONPATH=src python src/banking_agent/runners/run_agent.py
-```
-
-In this mode, Python builds the final response directly from structured tool results.
-
-### LLM-Assisted Mode
-
-```bash
-PYTHONPATH=src python src/banking_agent/runners/run_agent.py --use-llm
-```
-
-In this mode, Python still controls routing and tool execution, but Gemini writes the final customer-facing response using only tool results.
-
-The LLM is not allowed to create tickets or perform actions. Action tools are still controlled by Python and require confirmation.
-
-## Run the API
-
-Start the FastAPI server:
+Start the API:
 
 ```bash
 PYTHONPATH=src python -m uvicorn banking_agent.api.app:app --reload
 ```
 
-Open the interactive API docs:
+Open the browser UI:
+
+```text
+http://127.0.0.1:8000/ui
+```
+
+Swagger/OpenAPI docs are available at:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-Available endpoints:
+## Run with Docker
 
-```text
-GET  /health
-POST /support
-```
-
-## API Example
-
-Request:
-
-```json
-{
-  "user_request": "My QR payment TX1001 was deducted but the merchant did not receive it. What should I do?",
-  "use_llm": false,
-  "confirm_action": false
-}
-```
-
-Expected behaviour:
-
-```text
-The agent checks the transaction, retrieves policy context, checks dispute eligibility, and returns guidance without creating a ticket.
-```
-
-Action request without confirmation:
-
-```json
-{
-  "user_request": "Please raise a dispute for TX1001.",
-  "use_llm": false,
-  "confirm_action": false
-}
-```
-
-Expected behaviour:
-
-```text
-requires_confirmation: true
-dispute_ticket: null
-```
-
-Action request with confirmation:
-
-```json
-{
-  "user_request": "Please raise a dispute for TX1001.",
-  "use_llm": false,
-  "confirm_action": true
-}
-```
-
-Expected behaviour:
-
-```text
-requires_confirmation: false
-dispute_ticket.ticket_id: DSP-TX1001
-```
-
-## Run Tests
-
-Run the full test suite:
+Build the image:
 
 ```bash
-pytest
+DOCKER_BUILDKIT=1 docker build -t banking-support-agent .
 ```
 
-The tests cover:
-
-- transaction tools
-- policy tools
-- dispute eligibility tools
-- confirmation-gated action tools
-- deterministic routing
-- agent service behaviour
-- prompt building
-- LLM-assisted mode using fake generators
-- FastAPI endpoints
-
-Tests do not require live Gemini calls.
-
-## Docker
-
-Build the Docker image:
-
-```bash
-docker build -t banking-support-agent .
-```
-
-Run the API without LLM mode:
-
-```bash
-docker run --rm -p 8000:8000 banking-support-agent
-```
-
-Run with Gemini support:
+Run the container:
 
 ```bash
 docker run --rm --env-file .env -p 8000:8000 banking-support-agent
@@ -419,111 +232,123 @@ docker run --rm --env-file .env -p 8000:8000 banking-support-agent
 Open:
 
 ```text
-http://127.0.0.1:8000/docs
+http://127.0.0.1:8000/ui
 ```
 
-The `.env` file is passed at runtime and is not copied into the Docker image.
+For deterministic mode only, the app can also run without a Gemini key if `use_llm=false` is used in requests.
 
-## Continuous Integration
+## Example Workflow Demo
 
-This project uses GitHub Actions.
+Create a workflow through the support agent:
 
-On every push and pull request, CI:
+```bash
+curl -X POST "http://127.0.0.1:8000/support" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_request": "Please raise a dispute for TX1001.",
+    "use_llm": false,
+    "confirm_action": false
+  }'
+```
 
-- installs dependencies
-- runs the pytest test suite
-- builds the Docker image
-
-Workflow file:
+Expected response includes:
 
 ```text
-.github/workflows/ci.yml
+"requires_confirmation": true
+"workflow_id": "WF-..."
+"workflow_status": "awaiting_confirmation"
 ```
 
-## Example Outputs
+Inspect the workflow:
 
-### QR Payment Dispute
+```bash
+curl "http://127.0.0.1:8000/workflows/WF-YOURID"
+```
 
-Request:
+Execute the approved workflow action:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/workflows/WF-YOURID/execute"
+```
+
+Expected result:
 
 ```text
-My QR payment TX1001 was deducted but the merchant did not receive it. What should I do?
+workflow.status = completed
+dispute_ticket_id = DSP-TX1001
 ```
 
-Expected behaviour:
+## Testing
+
+Run all tests:
+
+```bash
+pytest
+```
+
+The tests cover:
+
+- routing behaviour
+- tool behaviour
+- agent service behaviour
+- prompt building
+- confirmation-gated actions
+- workflow state transitions
+- workflow audit events
+- workflow API endpoints
+- frontend route loading
+- FastAPI response schemas
+
+Tests do not call Gemini. Fake clients and deterministic responses are used where needed.
+
+## CI/CD
+
+GitHub Actions runs:
 
 ```text
-Transaction TX1001 is checked.
-QR payment dispute policy is retrieved.
-Dispute eligibility is checked.
-No ticket is created automatically.
+1. Python unit and API tests
+2. Docker image build using GitHub Actions cache
+3. Docker container smoke test
+4. /health endpoint check
+5. /ui route check
 ```
 
-### Dispute Action Without Confirmation
+The Docker image uses a smaller runtime-specific `requirements-docker.txt` file to avoid installing unnecessary development dependencies in the container.
 
-Request:
+## Portfolio Summary
 
-```text
-Please raise a dispute for TX1001.
-```
+This project shows how to design a controlled AI workflow system rather than an uncontrolled chatbot. It demonstrates:
 
-Expected behaviour:
+- safe tool use
+- deterministic routing
+- human/user confirmation gates
+- workflow state management
+- audit event tracking
+- FastAPI API design
+- browser-based demo UI
+- Docker packaging
+- CI/CD validation
 
-```text
-The agent investigates the case but asks for confirmation before creating a ticket.
-```
+## Limitations and Future Improvements
 
-### Dispute Action With Confirmation
+This project uses mock banking tools and in-memory workflow state for demonstration.
 
-Request:
+In a production banking environment, the system would require:
 
-```text
-Please raise a dispute for TX1001.
-```
+- persistent database storage
+- authentication and role-based access control
+- audit-log persistence
+- permission checks before actions
+- monitoring and alerting
+- human handoff workflows
+- integration with real core banking, CRM, or case-management systems
+- stricter data-governance and PII controls
 
-With:
+Future improvements could include:
 
-```text
-confirm_action = true
-```
-
-Expected behaviour:
-
-```text
-A mock dispute ticket is created with ID DSP-TX1001.
-```
-
-## Current Status
-
-Phase 7B complete:
-
-- Controlled banking support agent implemented
-- Typed mock tools added
-- Deterministic issue router added
-- Transaction ID extraction added
-- Action request detection added
-- Confirmation-gated action tool added
-- Optional Gemini final response generation added
-- FastAPI backend added
-- Docker support added
-- GitHub Actions CI added
-- Architecture documentation added
-- API examples added
-- Safety model documented
-- Design decisions documented
-- Unit and API tests passing
-- Docker image builds successfully in CI
-
-## Future Improvements
-
-Potential next improvements:
-
-- add real RAG policy retrieval instead of mock policy context
-- add more issue types
-- add streaming LLM responses
-- add authentication to the API
-- add richer ticket workflow states
-- add persistent ticket storage
-- add LangGraph-style workflow orchestration
-- add human approval UI for action confirmation
-- add observability and structured logs.
+- persistent workflow storage with SQLite/PostgreSQL
+- a richer workflow dashboard
+- stronger policy checks before action execution
+- role-based workflow approval
+- conversation history
+- deployment to a cloud container service

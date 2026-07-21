@@ -2,69 +2,208 @@
 
 ## Overview
 
-The Banking Support Agent is a controlled tool-using agent for banking and fintech support scenarios.
+The Banking Support Agent is a controlled tool-using support agent with a workflow automation layer for banking and fintech scenarios.
 
-The project demonstrates how an AI agent can use typed tools, deterministic routing, optional LLM-assisted response generation, and confirmation-gated action tools.
+The project demonstrates how an AI system can use typed tools, deterministic routing, optional LLM-assisted response generation, confirmation-gated action tools, workflow state tracking, and audit events.
 
 The core design principle is:
 
 ```text
 Python controls the workflow.
-Tools provide facts and actions.
-The LLM only writes the final customer-facing response when enabled.
+Tools provide facts and controlled actions.
+The LLM only writes the final response when enabled.
+Workflow state and audit events make actions traceable.
 ```
 
-## High-Level Flow
+## High-Level System Flow
 
 ```text
-User Request
-↓
-FastAPI API or CLI Runner
-↓
+User / Browser UI / API Client
+        ↓
+FastAPI API Layer
+        ↓
+Support Agent Service
+        ↓
 Deterministic Router
-↓
+        ↓
 Safe Tool Execution
-↓
+        ↓
 Optional Gemini Response Writer
-↓
-Final Agent Response
+        ↓
+Workflow Automation Layer
+        ↓
+Structured Agent + Workflow Response
 ```
 
-## Agent Flow
+## Main Runtime Flows
+
+### 1. Information-Only Support Flow
+
+```text
+User asks a question
+        ↓
+Router classifies intent and extracts details
+        ↓
+Read-only and decision-support tools run
+        ↓
+Agent returns answer
+        ↓
+No workflow is created if no tracked action is needed
+```
+
+Example:
+
+```text
+I forgot my mobile banking password.
+```
+
+### 2. Action Request Without Confirmation
+
+```text
+User asks to raise a dispute
+        ↓
+Router detects requested action
+        ↓
+Tools check transaction, policy, and eligibility
+        ↓
+Agent requires confirmation
+        ↓
+Workflow is created as awaiting_confirmation
+        ↓
+Audit events are recorded
+        ↓
+Response returns workflow_id
+```
+
+Example:
+
+```text
+Please raise a dispute for TX1001.
+```
+
+### 3. Workflow Execution Flow
+
+```text
+Workflow is awaiting_confirmation
+        ↓
+/workflows/{workflow_id}/execute is called
+        ↓
+Workflow is confirmed
+        ↓
+Agent reruns controlled action path with confirm_action=true
+        ↓
+Mock dispute ticket is created
+        ↓
+Workflow is marked completed
+        ↓
+Audit events are updated
+```
+
+## Mermaid Flow
 
 ```mermaid
 flowchart TD
-    A[User Request] --> B[Deterministic Router]
+    A[User Request] --> B[FastAPI API or Browser UI]
+    B --> C[Support Agent Service]
+    C --> D[Deterministic Router]
 
-    B --> C[Classify Issue Type]
-    B --> D[Extract Transaction ID]
-    B --> E[Detect Requested Action]
+    D --> E[Classify Issue Type]
+    D --> F[Extract Transaction ID]
+    D --> G[Detect Requested Action]
 
-    C --> F[Agent Service]
-    D --> F
-    E --> F
+    E --> H[Safe Tool Execution]
+    F --> H
+    G --> H
 
-    F --> G[Check Transaction Status Tool]
-    F --> H[Retrieve Policy Context Tool]
-    F --> I[Check Dispute Eligibility Tool]
+    H --> I[Check Transaction Status]
+    H --> J[Retrieve Policy Context]
+    H --> K[Check Dispute Eligibility]
 
-    I --> J{Action Requested?}
-    J -->|No| K[Build Response]
-    J -->|Yes, no confirmation| L[Ask for Confirmation]
-    J -->|Yes, confirmed| M[Create Mock Dispute Ticket]
+    K --> L{Action Requested?}
+    L -->|No| M[Build Agent Response]
+    L -->|Yes, no confirmation| N[Require Confirmation]
+    L -->|Yes, confirmed| O[Create Mock Dispute Ticket]
 
-    M --> K
-    L --> K
+    N --> P[Create Workflow]
+    P --> Q[Record Audit Events]
+    Q --> M
 
-    K --> N{Use LLM?}
-    N -->|No| O[Deterministic Response]
-    N -->|Yes| P[Gemini Response Writer]
+    O --> R[Complete Workflow]
+    R --> M
 
-    O --> Q[Final Agent Response]
-    P --> Q
+    M --> S{Use LLM?}
+    S -->|No| T[Deterministic Response]
+    S -->|Yes| U[Gemini Response Writer]
+
+    T --> V[Final API Response]
+    U --> V
 ```
 
 ## Main Layers
+
+### API Layer
+
+Location:
+
+```text
+src/banking_agent/api/
+```
+
+Purpose:
+
+- expose FastAPI endpoints
+- serve the lightweight browser UI
+- convert internal models into API response schemas
+- map domain errors to HTTP responses
+
+Key files:
+
+```text
+app.py
+routes.py
+schemas.py
+dependencies.py
+frontend_routes.py
+```
+
+Main endpoints:
+
+```text
+GET  /health
+POST /support
+GET  /workflows
+POST /workflows
+GET  /workflows/{workflow_id}
+GET  /workflows/{workflow_id}/events
+POST /workflows/{workflow_id}/confirm
+POST /workflows/{workflow_id}/reject
+POST /workflows/{workflow_id}/complete
+POST /workflows/{workflow_id}/fail
+POST /workflows/{workflow_id}/execute
+GET  /ui
+```
+
+### Web UI Layer
+
+Location:
+
+```text
+src/banking_agent/web/
+```
+
+Purpose:
+
+- provide a lightweight browser demo
+- call the `/support` and workflow endpoints
+- display agent responses, tool calls, workflow status, workflow queue, and audit events
+
+Key files:
+
+```text
+templates/index.html
+static/app.js
+static/styles.css
+```
 
 ### Core Layer
 
@@ -87,6 +226,39 @@ schemas.py
 exceptions.py
 config.py
 ```
+
+Important models include:
+
+```text
+AgentResponse
+ToolCallRecord
+DisputeTicket
+SupportWorkflow
+WorkflowEvent
+```
+
+### Routing Layer
+
+Location:
+
+```text
+src/banking_agent/routing/
+```
+
+Purpose:
+
+- classify issue type
+- extract transaction IDs
+- detect requested actions
+- decide which tools are needed
+
+Key file:
+
+```text
+router.py
+```
+
+The router is deterministic so routing behaviour is predictable and testable.
 
 ### Tools Layer
 
@@ -112,26 +284,45 @@ dispute_tools.py
 action_tools.py
 ```
 
-### Routing Layer
+Tool categories:
+
+```text
+Read-only:
+- check_transaction_status
+- retrieve_policy_context
+
+Decision-support:
+- check_dispute_eligibility
+
+Action:
+- create_dispute_ticket
+```
+
+### Service Layer
 
 Location:
 
 ```text
-src/banking_agent/routing/
+src/banking_agent/services/
 ```
 
 Purpose:
 
-- classify issue type
-- extract transaction IDs
-- detect requested actions
-- decide which tools are needed
+- orchestrate routing and tools
+- enforce confirmation-gated action logic
+- create workflow records when support actions need tracking
+- manage workflow state transitions and audit events
 
-Key file:
+Key files:
 
 ```text
-router.py
+agent_service.py
+workflow_service.py
 ```
+
+`agent_service.py` controls the agent logic.
+
+`workflow_service.py` controls workflow state, valid transitions, and event logging.
 
 ### Generation Layer
 
@@ -153,113 +344,72 @@ prompt_builder.py
 llm_client.py
 ```
 
-The LLM does not control tool execution. It only receives the completed tool results and writes a final response.
+The LLM does not control tool execution. It receives completed tool results and writes a final response only when LLM-assisted mode is enabled.
 
-### Service Layer
+## Workflow State Model
 
-Location:
-
-```text
-src/banking_agent/services/
-```
-
-Purpose:
-
-- orchestrate routing and tools
-- enforce confirmation-gated action logic
-- return structured agent responses
-
-Key file:
+Workflow statuses:
 
 ```text
-agent_service.py
+created
+awaiting_confirmation
+approved
+completed
+rejected
+failed
 ```
 
-### API Layer
-
-Location:
+Workflow event types:
 
 ```text
-src/banking_agent/api/
+workflow_created
+intent_classified
+tool_called
+confirmation_required
+user_confirmed
+action_completed
+action_rejected
+workflow_failed
 ```
 
-Purpose:
-
-- expose the agent through FastAPI
-- provide `/health` and `/support` endpoints
-- support deterministic and LLM-assisted modes
-
-Key files:
-
-```text
-app.py
-routes.py
-schemas.py
-dependencies.py
-```
-
-## API Endpoints
-
-```text
-GET  /health
-POST /support
-```
-
-The `/support` endpoint accepts:
-
-```text
-user_request
-use_llm
-confirm_action
-```
-
-This allows the same agent workflow to run in deterministic mode, LLM-assisted mode, or confirmed-action mode.
-
-## Tool Safety Model
-
-The project separates tools into three categories:
-
-```text
-Read-only tools:
-- check_transaction_status
-- retrieve_policy_context
-
-Decision-support tools:
-- check_dispute_eligibility
-
-Action tools:
-- create_dispute_ticket
-```
-
-Action tools require explicit confirmation.
+The service validates status transitions so invalid actions fail safely.
 
 ## Testing Strategy
 
-The project includes unit and API tests for:
+The project includes tests for:
 
-- tools
+- tool behaviour
 - router behaviour
 - agent service behaviour
 - prompt building
 - confirmation-gated actions
-- FastAPI endpoints
+- workflow service transitions
+- workflow audit events
+- workflow API endpoints
+- support-to-workflow integration
+- workflow execution endpoint
+- frontend route loading
 
-Tests use fake clients where needed, so they do not depend on live Gemini calls.
+Tests use deterministic behaviour and fake clients where needed, so they do not depend on live Gemini calls.
 
-## CI and Docker
+## Docker and CI
 
 The project includes:
 
 ```text
 Dockerfile
+requirements-docker.txt
 .github/workflows/ci.yml
 ```
+
+The Docker image uses runtime-only dependencies.
 
 GitHub Actions runs:
 
 ```text
 pytest
-docker build
+Docker build with GitHub Actions cache
+Docker container smoke test
+/health check
+/ui check
 ```
-
-on every push and pull request.
