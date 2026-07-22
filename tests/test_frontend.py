@@ -12,5 +12,7 @@ def test_workflow_ui_loads() -> None:
     assert response.status_code == 200
     assert "Banking Support Workflow Agent" in response.text
     assert "Support request" in response.text
+    assert "Security review" in response.text
+    assert "Demo uses mock banking data" in response.text
     assert "/static/app.js" in response.text
     assert "/static/styles.css" in response.text

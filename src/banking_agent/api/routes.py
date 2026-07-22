@@ -39,6 +39,8 @@ from banking_agent.core.schemas import (
 from banking_agent.services.workflow_service import InMemoryWorkflowService
 from typing import NoReturn, cast, get_args
 from banking_agent.routing.router import route_user_request
+from banking_agent.security.prompt_safety import check_prompt_safety
+from banking_agent.security.sensitive_data import mask_sensitive_text
 
 
 router = APIRouter()
@@ -48,35 +50,40 @@ def to_support_response(
     response: AgentResponse,
     workflow_id: str | None = None,
     workflow_status: str | None = None,
+    risk_level: str = "low",
+    security_flags: list[str] | None = None,
 ) -> SupportResponse:
-    """Convert internal AgentResponse into API response schema."""
-    dispute_ticket = None
-
-    if response.dispute_ticket is not None:
-        dispute_ticket = DisputeTicketAPIResponse(
-            ticket_id=response.dispute_ticket.ticket_id,
-            transaction_id=response.dispute_ticket.transaction_id,
-            issue_type=response.dispute_ticket.issue_type,
-            status=response.dispute_ticket.status,
-            summary=response.dispute_ticket.summary,
-            requires_human_review=response.dispute_ticket.requires_human_review,
-        )
-
+    """Convert an internal agent response into a privacy-conscious API response."""
     return SupportResponse(
-        user_request=response.user_request,
-        answer=response.answer,
+        user_request=mask_sensitive_text(response.user_request),
+        answer=mask_sensitive_text(response.answer),
         tool_calls=[
             ToolCallAPIResponse(
                 tool_name=tool_call.tool_name,
-                input_summary=tool_call.input_summary,
-                output_summary=tool_call.output_summary,
+                input_summary=mask_sensitive_text(tool_call.input_summary),
+                output_summary=mask_sensitive_text(tool_call.output_summary),
             )
             for tool_call in response.tool_calls
         ],
         requires_confirmation=response.requires_confirmation,
-        dispute_ticket=dispute_ticket,
+        dispute_ticket=(
+            DisputeTicketAPIResponse(
+                ticket_id=response.dispute_ticket.ticket_id,
+                transaction_id=mask_sensitive_text(
+                    response.dispute_ticket.transaction_id
+                ),
+                issue_type=response.dispute_ticket.issue_type,
+                status=response.dispute_ticket.status,
+                summary=mask_sensitive_text(response.dispute_ticket.summary),
+                requires_human_review=response.dispute_ticket.requires_human_review,
+            )
+            if response.dispute_ticket is not None
+            else None
+        ),
         workflow_id=workflow_id,
         workflow_status=workflow_status,
+        risk_level=risk_level,
+        security_flags=security_flags or [],
     )
 
 def parse_issue_type_from_text(text: str) -> IssueType | None:
@@ -251,34 +258,32 @@ def execute_workflow_action(
     )
 
 def to_workflow_response(workflow: SupportWorkflow) -> WorkflowAPIResponse:
-    """Convert internal SupportWorkflow into API response schema."""
+    """Convert an internal workflow into a privacy-conscious API response."""
     return WorkflowAPIResponse(
         workflow_id=workflow.workflow_id,
-        user_request=workflow.user_request,
-        customer_id=workflow.customer_id,
+        user_request=mask_sensitive_text(workflow.user_request),
+        customer_id=mask_optional_text(workflow.customer_id),
         issue_type=workflow.issue_type,
-        transaction_id=workflow.transaction_id,
+        transaction_id=mask_optional_text(workflow.transaction_id),
         status=workflow.status,
         requires_confirmation=workflow.requires_confirmation,
         recommended_action=workflow.recommended_action,
         created_at=workflow.created_at,
         updated_at=workflow.updated_at,
-        failure_reason=workflow.failure_reason,
-        dispute_ticket_id=workflow.dispute_ticket_id,
+        failure_reason=mask_optional_text(workflow.failure_reason),
+        dispute_ticket_id=mask_optional_text(workflow.dispute_ticket_id),
     )
 
 
-def to_workflow_event_response(
-    event: WorkflowEvent,
-) -> WorkflowEventAPIResponse:
-    """Convert internal WorkflowEvent into API response schema."""
+def to_workflow_event_response(event: WorkflowEvent) -> WorkflowEventAPIResponse:
+    """Convert an internal workflow event into a privacy-conscious API response."""
     return WorkflowEventAPIResponse(
         event_id=event.event_id,
         workflow_id=event.workflow_id,
         event_type=event.event_type,
-        message=event.message,
+        message=mask_sensitive_text(event.message),
         created_at=event.created_at,
-        metadata=event.metadata,
+        metadata=mask_metadata(event.metadata),
     )
 
 
@@ -300,6 +305,40 @@ def handle_workflow_error(error: BankingAgentError) -> NoReturn:
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=str(error),
     ) from error
+
+def create_prompt_safety_response(
+    user_request: str,
+    risk_level: str,
+    security_flags: list[str],
+    safe_message: str,
+) -> SupportResponse:
+    """Create a safe response for blocked prompt-safety requests."""
+    return SupportResponse(
+        user_request=mask_sensitive_text(user_request),
+        answer=mask_sensitive_text(safe_message),
+        tool_calls=[],
+        requires_confirmation=False,
+        dispute_ticket=None,
+        workflow_id=None,
+        workflow_status=None,
+        risk_level=risk_level,
+        security_flags=security_flags,
+    )
+
+def mask_optional_text(value: str | None) -> str | None:
+    """Mask sensitive identifiers from optional text values."""
+    if value is None:
+        return None
+
+    return mask_sensitive_text(value)
+
+
+def mask_metadata(metadata: dict[str, str]) -> dict[str, str]:
+    """Mask sensitive identifiers from workflow event metadata values."""
+    return {
+        key: mask_sensitive_text(value)
+        for key, value in metadata.items()
+    }
 
 
 @router.get("/")
@@ -329,6 +368,21 @@ def handle_support_request(
     workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
 ) -> SupportResponse:
     """Handle a banking support request through the controlled agent."""
+
+    safety_result = check_prompt_safety(request.user_request)
+
+
+    if not safety_result.is_allowed:
+        return create_prompt_safety_response(
+            user_request=request.user_request,
+            risk_level=safety_result.risk_level,
+            security_flags=safety_result.flags,
+            safe_message=(
+                safety_result.safe_message
+                or "This request cannot be processed safely."
+            ),
+        )
+
     try:
         agent = agent_factory(request.use_llm)
         response = agent.handle_request(
@@ -336,6 +390,19 @@ def handle_support_request(
             use_llm=request.use_llm,
             confirm_action=request.confirm_action,
         )
+
+        workflow_id, workflow_status = create_workflow_from_agent_response(
+            user_request=request.user_request,
+            response=response,
+            workflow_service=workflow_service,
+        )
+
+        return to_support_response(
+            response=response,
+            workflow_id=workflow_id,
+            workflow_status=workflow_status,
+        )
+
     except GenerationError as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -346,18 +413,6 @@ def handle_support_request(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(error),
         ) from error
-
-    workflow_id, workflow_status = create_workflow_from_agent_response(
-        user_request=request.user_request,
-        response=response,
-        workflow_service=workflow_service,
-    )
-
-    return to_support_response(
-        response=response,
-        workflow_id=workflow_id,
-        workflow_status=workflow_status,
-    )
 
 
 @router.post(

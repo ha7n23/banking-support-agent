@@ -13,7 +13,12 @@
       <h1>Banking Support Workflow Agent</h1>
       <p class="subtitle">
         A controlled support agent that uses tools, creates workflows,
-        requires confirmation, executes approved actions, and records audit events.
+        requires confirmation, executes approved actions, records audit events,
+        and blocks unsafe prompt-injection style requests.
+      </p>
+      <p class="demo-warning">
+        Demo uses mock banking data. Do not enter real customer, account, card,
+        CNIC, password, or API key details.
       </p>
     </section>
 
@@ -68,6 +73,13 @@
           <p id="answer-text" class="muted">
             Submit a request to see the support agent response.
           </p>
+        </article>
+
+        <article class="card">
+          <h3>Security review</h3>
+          <div id="security-summary" class="empty-state">
+            No security review yet.
+          </div>
         </article>
 
         <article class="card">

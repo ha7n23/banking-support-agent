@@ -7,6 +7,7 @@ const submitButton = document.getElementById("submit-button");
 const statusPill = document.getElementById("status-pill");
 const errorBox = document.getElementById("error-box");
 const answerText = document.getElementById("answer-text");
+const securitySummary = document.getElementById("security-summary");
 const workflowSummary = document.getElementById("workflow-summary");
 const toolCallsList = document.getElementById("tool-calls-list");
 const eventsList = document.getElementById("events-list");
@@ -46,6 +47,27 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function renderSecuritySummary(data) {
+  const riskLevel = data.risk_level || "low";
+  const securityFlags = data.security_flags || [];
+
+  const flagsText =
+    securityFlags.length > 0 ? securityFlags.join(", ") : "None";
+
+  securitySummary.className = "";
+  securitySummary.innerHTML = `
+    <div class="item-title">
+      Risk level:
+      <span class="status-tag ${escapeHtml(riskLevel)}">
+        ${escapeHtml(riskLevel)}
+      </span>
+    </div>
+    <div class="item-meta">
+      Security flags: ${escapeHtml(flagsText)}
+    </div>
+  `;
 }
 
 function renderToolCalls(toolCalls) {
@@ -227,6 +249,7 @@ async function submitSupportRequest(event) {
     });
 
     answerText.textContent = data.answer;
+    renderSecuritySummary(data);
     renderToolCalls(data.tool_calls);
     renderWorkflowSummary(data);
 
@@ -265,6 +288,7 @@ async function executeActiveWorkflow() {
     });
 
     answerText.textContent = data.support_response.answer;
+    renderSecuritySummary(data.support_response);
     renderToolCalls(data.support_response.tool_calls);
     renderWorkflowSummary(data.support_response);
     await loadWorkflowEvents(activeWorkflowId);

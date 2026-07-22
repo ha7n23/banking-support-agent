@@ -54,6 +54,8 @@ class SupportResponse(BaseModel):
     dispute_ticket: DisputeTicketAPIResponse | None = None
     workflow_id: str | None = None
     workflow_status: str | None = None
+    risk_level: str = "low"
+    security_flags: list[str] = Field(default_factory=list)
 
 class WorkflowCreateRequest(BaseModel):
     """Request body for creating a support workflow."""
