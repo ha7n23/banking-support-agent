@@ -565,13 +565,13 @@ cloud_deployment_docs/aws/screenshots/
 Markdown references:
 
 ```markdown
-![UI working](screenshots/01_ui_working.png)
-![UI Prompt Safety Check](screenshots/02-ui-safety-check.png)
-![Health Endpoint working ](screenshots/03-health-endpoint-working.png)
-![AWS Service running](screenshots/04-service-running.png)
-![AWS Console Health metrics on ECS-Cluster](screenshots/05-cluster-health.png)
-![AWS Console Load Balancer metrics](screenshots/06-load-balancer-metrics.png)
-![AWS Logs](screenshots/07-logs.png)
+![UI working](cloud_deployment_docs/aws/screenshots/01_ui_working.png)
+![UI Prompt Safety Check](cloud_deployment_docs/aws/screenshots/02-ui-safety-check.png)
+![Health Endpoint working ](cloud_deployment_docs/aws/screenshots/03-health-endpoint-working.png)
+![AWS Service running](cloud_deployment_docs/aws/screenshots/04-service-running.png)
+![AWS Console Health metrics on ECS-Cluster](cloud_deployment_docs/aws/screenshots/05-cluster-health.png)
+![AWS Console Load Balancer metrics](cloud_deployment_docs/aws/screenshots/06-load-balancer-metrics.png)
+![AWS Logs](cloud_deployment_docs/aws/screenshots/07-logs.png)
 ```
 
 ---
