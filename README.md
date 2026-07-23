@@ -94,8 +94,8 @@ The LLM does not control tools directly. It only writes the final response from 
 - [Safety Model](docs/SAFETY_MODEL.md)
 - [Design Decisions](docs/DESIGN_DECISIONS.md)
 - [Security and Responsible AI](docs/SECURITY_AND_RESPONSIBLE_AI.md)
-- [AWS Deployment](cloud_deployment/AWS/DEPLOYMENT.md)
-- [Google Cloud Deployment](cloud_deployment/Google_Cloud/DEPLOYMENT.md)
+- [AWS Deployment](cloud_deployment_docs/aws/DEPLOYMENT.md)
+- [Google Cloud Deployment](cloud_deployment_docs/google_cloud/DEPLOYMENT.md)
 
 ## Tech Stack
 
