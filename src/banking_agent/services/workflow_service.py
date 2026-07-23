@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Protocol
 from uuid import uuid4
 
 from banking_agent.core.exceptions import (
@@ -13,6 +14,73 @@ from banking_agent.core.schemas import (
     WorkflowStatus,
 )
 
+class WorkflowServiceProtocol(Protocol):
+    """Contract shared by workflow storage implementations."""
+
+    def create_workflow(
+        self,
+        user_request: str,
+        issue_type: IssueType,
+        transaction_id: str | None = None,
+        customer_id: str | None = None,
+        requires_confirmation: bool = False,
+        recommended_action: str | None = None,
+    ) -> SupportWorkflow:
+        """Create a new support workflow and initial audit events."""
+        ...
+
+    def get_workflow(self, workflow_id: str) -> SupportWorkflow:
+        """Return a workflow by ID."""
+        ...
+
+    def list_workflows(self) -> list[SupportWorkflow]:
+        """Return all workflows, newest created first."""
+        ...
+
+    def list_events(self, workflow_id: str) -> list[WorkflowEvent]:
+        """Return audit events for a workflow."""
+        ...
+
+    def record_intent_classified(
+        self,
+        workflow_id: str,
+        issue_type: IssueType,
+    ) -> WorkflowEvent:
+        """Record that the request intent was classified."""
+        ...
+
+    def record_tool_called(
+        self,
+        workflow_id: str,
+        tool_name: str,
+        output_summary: str,
+    ) -> WorkflowEvent:
+        """Record a tool call audit event."""
+        ...
+
+    def confirm_workflow(self, workflow_id: str) -> SupportWorkflow:
+        """Confirm a workflow that is waiting for user approval."""
+        ...
+
+    def reject_workflow(self, workflow_id: str) -> SupportWorkflow:
+        """Reject a workflow that is waiting for user approval."""
+        ...
+
+    def complete_workflow(
+        self,
+        workflow_id: str,
+        dispute_ticket_id: str | None = None,
+    ) -> SupportWorkflow:
+        """Mark a workflow as completed."""
+        ...
+
+    def fail_workflow(
+        self,
+        workflow_id: str,
+        failure_reason: str,
+    ) -> SupportWorkflow:
+        """Mark a workflow as failed."""
+        ...
 
 class InMemoryWorkflowService:
     """

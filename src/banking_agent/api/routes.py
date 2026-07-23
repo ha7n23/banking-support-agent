@@ -36,7 +36,7 @@ from banking_agent.core.schemas import (
     WorkflowEvent,
 )
 
-from banking_agent.services.workflow_service import InMemoryWorkflowService
+from banking_agent.services.workflow_service import WorkflowServiceProtocol
 from typing import NoReturn, cast, get_args
 from banking_agent.routing.router import route_user_request
 from banking_agent.security.prompt_safety import check_prompt_safety
@@ -130,7 +130,7 @@ def infer_workflow_issue_type(
 def create_workflow_from_agent_response(
     user_request: str,
     response: AgentResponse,
-    workflow_service: InMemoryWorkflowService,
+    workflow_service: WorkflowServiceProtocol,
 ) -> tuple[str | None, str | None]:
     """
     Create a support workflow when the agent response needs workflow tracking.
@@ -189,7 +189,7 @@ def create_workflow_from_agent_response(
 def execute_workflow_action(
     workflow_id: str,
     agent_factory: AgentFactory,
-    workflow_service: InMemoryWorkflowService,
+    workflow_service: WorkflowServiceProtocol,
 ) -> WorkflowExecutionResponse:
     """
     Execute an approved workflow action through the controlled agent.
@@ -365,7 +365,7 @@ def health_check() -> HealthResponse:
 def handle_support_request(
     request: SupportRequest,
     agent_factory: AgentFactory = Depends(get_agent_factory),
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> SupportResponse:
     """Handle a banking support request through the controlled agent."""
 
@@ -422,7 +422,7 @@ def handle_support_request(
 )
 def create_workflow(
     request: WorkflowCreateRequest,
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> WorkflowAPIResponse:
     """Create a controlled support workflow."""
     workflow = workflow_service.create_workflow(
@@ -441,7 +441,7 @@ def create_workflow(
     response_model=list[WorkflowAPIResponse],
 )
 def list_workflows(
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> list[WorkflowAPIResponse]:
     """Return all support workflows."""
     workflows = workflow_service.list_workflows()
@@ -455,7 +455,7 @@ def list_workflows(
 )
 def get_workflow(
     workflow_id: str,
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> WorkflowAPIResponse:
     """Return a workflow by ID."""
     try:
@@ -472,7 +472,7 @@ def get_workflow(
 )
 def list_workflow_events(
     workflow_id: str,
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> list[WorkflowEventAPIResponse]:
     """Return audit events for a workflow."""
     try:
@@ -489,7 +489,7 @@ def list_workflow_events(
 )
 def confirm_workflow(
     workflow_id: str,
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> WorkflowAPIResponse:
     """Confirm a workflow action that is awaiting approval."""
     try:
@@ -506,7 +506,7 @@ def confirm_workflow(
 )
 def reject_workflow(
     workflow_id: str,
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> WorkflowAPIResponse:
     """Reject a workflow action that is awaiting approval."""
     try:
@@ -524,7 +524,7 @@ def reject_workflow(
 def complete_workflow(
     workflow_id: str,
     request: WorkflowCompleteRequest,
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> WorkflowAPIResponse:
     """Complete a workflow."""
     try:
@@ -545,7 +545,7 @@ def complete_workflow(
 def fail_workflow(
     workflow_id: str,
     request: WorkflowFailRequest,
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> WorkflowAPIResponse:
     """Mark a workflow as failed."""
     try:
@@ -565,7 +565,7 @@ def fail_workflow(
 def execute_workflow(
     workflow_id: str,
     agent_factory: AgentFactory = Depends(get_agent_factory),
-    workflow_service: InMemoryWorkflowService = Depends(get_workflow_service),
+    workflow_service: WorkflowServiceProtocol = Depends(get_workflow_service),
 ) -> WorkflowExecutionResponse:
     """Execute an approved workflow action."""
     try:
