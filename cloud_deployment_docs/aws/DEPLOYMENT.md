@@ -63,20 +63,21 @@ Deployment files are kept separately from application code.
 
 ```text
 banking-support-agent/
-  cloud_deployment/
-    AWS/
+  cloud_deployment_docs/
+    aws/
       DEPLOYMENT.md
-      Screenshots/
-        01_ui_working.png
-        02_health_endpoint.png
-        03_ecs_service_running.png
-        04_ecr_image_pushed.png
-        05_secret_reference.png
-        06_cloudwatch_logs.png
+      screenshots/
+        01_ui_endpoint-working.png
+        02-ui-safety-check.png
+        03-health-endpoint-working.png
+        04-service-running.png
+        05-cluster-health.png
+        06-load-balancer-metrics.png
+        07-logs.png
 
-    Google_Cloud/
+    google_cloud/
       DEPLOYMENT.md
-      Screenshots/
+      screenshots/
 ```
 
 ---
@@ -548,7 +549,7 @@ no dispute ticket created
 Screenshots are stored in:
 
 ```text
-cloud_deployment/AWS/Screenshots/
+cloud_deployment_docs/aws/screenshots/
 ```
 
 ```text
@@ -564,13 +565,13 @@ cloud_deployment/AWS/Screenshots/
 Markdown references:
 
 ```markdown
-![UI working](Screenshots/01_ui_working.png)
-![UI Prompt Safety Check](Screenshots/02-ui-safety-check.png)
-![Health Endpoint working ](Screenshots/03-health-endpoint-working.png)
-![AWS Service running](Screenshots/04-service-running.png)
-![AWS Console Health metrics on ECS-Cluster](Screenshots/05-cluster-health.png)
-![AWS Console Load Balancer metrics](Screenshots/06-load-balancer-metrics.png)
-![AWS Logs](Screenshots/07-logs.png)
+![UI working](screenshots/01_ui_working.png)
+![UI Prompt Safety Check](screenshots/02-ui-safety-check.png)
+![Health Endpoint working ](screenshots/03-health-endpoint-working.png)
+![AWS Service running](screenshots/04-service-running.png)
+![AWS Console Health metrics on ECS-Cluster](screenshots/05-cluster-health.png)
+![AWS Console Load Balancer metrics](screenshots/06-load-balancer-metrics.png)
+![AWS Logs](screenshots/07-logs.png)
 ```
 
 ---
