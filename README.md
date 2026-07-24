@@ -95,6 +95,7 @@ The LLM does not control tools directly. It only writes the final response from 
 - [Design Decisions](docs/DESIGN_DECISIONS.md)
 - [Security and Responsible AI](docs/SECURITY_AND_RESPONSIBLE_AI.md)
 - [AWS Deployment](cloud_deployment_docs/aws/DEPLOYMENT.md)
+- [PostgreSQL Database](docs/DATABASE.md)
 
 ## Tech Stack
 
