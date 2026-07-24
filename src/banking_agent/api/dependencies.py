@@ -1,8 +1,10 @@
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 
+from banking_agent.core.config import WORKFLOW_STORAGE_BACKEND
+from banking_agent.database.connection import get_session_factory
 from banking_agent.generation.llm_client import GeminiTextGenerator
 from banking_agent.services.agent_service import BankingSupportAgent
-
+from banking_agent.services.database_workflow_service import DatabaseWorkflowService
 from banking_agent.services.workflow_service import (
     InMemoryWorkflowService,
     WorkflowServiceProtocol,
@@ -11,7 +13,7 @@ from banking_agent.services.workflow_service import (
 
 AgentFactory = Callable[[bool], BankingSupportAgent]
 
-workflow_service: WorkflowServiceProtocol = InMemoryWorkflowService()
+memory_workflow_service: WorkflowServiceProtocol = InMemoryWorkflowService()
 
 
 def get_agent_factory() -> AgentFactory:
@@ -23,6 +25,17 @@ def get_agent_factory() -> AgentFactory:
 
     return factory
 
-def get_workflow_service() -> WorkflowServiceProtocol:
-    """Return the shared in-memory workflow service."""
-    return workflow_service
+
+def get_workflow_service() -> Generator[WorkflowServiceProtocol, None, None]:
+    """Yield the configured workflow service."""
+    if WORKFLOW_STORAGE_BACKEND == "memory":
+        yield memory_workflow_service
+        return
+
+    session_factory = get_session_factory()
+    session = session_factory()
+
+    try:
+        yield DatabaseWorkflowService(session)
+    finally:
+        session.close()
