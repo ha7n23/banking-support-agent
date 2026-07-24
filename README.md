@@ -2,9 +2,9 @@
 
 ![CI](https://github.com/ha7n23/banking-support-agent/actions/workflows/ci.yml/badge.svg)
 
-A controlled banking support agent and workflow automation demo built with Python, FastAPI, typed mock tools, optional Gemini response generation, confirmation-gated actions, audit events, a lightweight browser UI, Docker, and GitHub Actions CI.
+A controlled banking support agent and workflow automation demo built with Python, FastAPI, typed mock tools, optional Gemini response generation, confirmation-gated actions, audit events, PostgreSQL workflow persistence, a lightweight browser UI, Docker, Docker Compose, and GitHub Actions CI.
 
-This project demonstrates a safer way to build tool-using AI systems for banking and fintech workflows. The LLM does not freely execute tools. Python controls routing, tool execution, workflow state, confirmation gates, and audit events. Gemini can optionally be used only to write the final customer-facing response from completed tool results.
+This project demonstrates a safer way to build tool-using AI systems for banking and fintech workflows. The LLM does not freely execute tools. Python controls routing, tool execution, workflow state, confirmation gates, audit events, and persistence. Gemini can optionally be used only to write the final customer-facing response from completed tool results.
 
 ## Project Summary
 
@@ -16,15 +16,25 @@ The agent can handle support requests such as:
 - refund timeline questions
 - dispute ticket action requests
 
-The project now includes a workflow automation layer. When a user requests an action, such as raising a dispute, the system can create a workflow, return a workflow ID, record audit events, wait for confirmation, execute the approved action, and mark the workflow as completed.
+The project includes a workflow automation layer. When a user requests an action, such as raising a dispute, the system can create a workflow, return a workflow ID, record audit events, wait for confirmation, execute the approved action, and mark the workflow as completed.
+
+Workflow state can run in either:
+
+```text
+memory
+postgres
+```
+
+The memory backend keeps the app simple for local development and fast tests. The PostgreSQL backend provides durable workflow persistence using SQLAlchemy, Alembic migrations, and Docker Compose.
 
 Core idea:
 
 ```text
-Python controls routing, tools, workflow state, and approval gates.
+Python controls routing, tools, workflow state, approval gates, and persistence.
 Tools provide structured facts and controlled actions.
 Gemini optionally writes the final response from completed tool results.
 Workflow events preserve an audit trail.
+PostgreSQL can persist workflow state and audit history across app restarts.
 ```
 
 ## Why This Project Matters
@@ -38,6 +48,7 @@ Read-only tools can run automatically.
 Decision-support tools can run automatically.
 Action tools require explicit confirmation.
 Workflow actions are tracked through state and audit events.
+Workflow data can be persisted using PostgreSQL.
 ```
 
 For example, the agent can automatically check a transaction status, retrieve policy context, and check dispute eligibility. It cannot create a dispute ticket unless the user confirms the action or the workflow is explicitly executed after approval.
@@ -51,14 +62,20 @@ For example, the agent can automatically check a transaction status, retrieve po
 - Deterministic fallback mode without LLM calls
 - Confirmation-gated mock dispute ticket creation
 - Workflow state tracking
+- Configurable workflow storage backend: memory or PostgreSQL
+- PostgreSQL-backed workflow persistence
+- SQLAlchemy repository layer
+- Alembic database migrations
 - Workflow listing and inspection endpoints
 - Workflow confirmation, rejection, execution, completion, and failure endpoints
 - Audit event logging for workflow actions
+- Masked workflow request persistence for safer handling of sensitive input
 - Lightweight FastAPI browser UI at `/ui`
 - FastAPI backend with typed request and response schemas
-- Docker-optimised runtime using `requirements-docker.txt`
+- Docker runtime using `requirements-docker.txt`
+- Docker Compose setup for local PostgreSQL
 - GitHub Actions CI with Python tests, Docker build cache, and Docker smoke tests
-- Unit and API tests
+- Unit, API, and opt-in PostgreSQL integration tests
 - Professional project documentation
 
 ## Architecture
@@ -81,6 +98,14 @@ Workflow Automation Layer
         ├── action execution
         └── audit events
         ↓
+Workflow Storage Backend
+        ├── memory backend
+        └── PostgreSQL backend
+              ├── SQLAlchemy models
+              ├── repository layer
+              ├── Alembic migrations
+              └── PostgreSQL tables
+        ↓
 Structured API Response
 ```
 
@@ -94,8 +119,8 @@ The LLM does not control tools directly. It only writes the final response from 
 - [Safety Model](docs/SAFETY_MODEL.md)
 - [Design Decisions](docs/DESIGN_DECISIONS.md)
 - [Security and Responsible AI](docs/SECURITY_AND_RESPONSIBLE_AI.md)
-- [AWS Deployment](cloud_deployment_docs/aws/DEPLOYMENT.md)
 - [PostgreSQL Database](docs/DATABASE.md)
+- [AWS Deployment](cloud_deployment_docs/aws/DEPLOYMENT.md)
 
 ## Tech Stack
 
@@ -106,19 +131,31 @@ The LLM does not control tools directly. It only writes the final response from 
 - Google Gemini
 - Jinja2
 - HTML/CSS/JavaScript
+- PostgreSQL
+- SQLAlchemy
+- psycopg
+- Alembic
 - Pytest
 - Docker
+- Docker Compose
 - GitHub Actions
 
 ## Project Structure
 
 ```text
 banking-support-agent/
+  alembic/
+    env.py
+    versions/
+      001_create_workflow_tables.py
+
   docs/
     API_EXAMPLES.md
     ARCHITECTURE.md
+    DATABASE.md
     DESIGN_DECISIONS.md
     SAFETY_MODEL.md
+    SECURITY_AND_RESPONSIBLE_AI.md
     WORKFLOW_AUTOMATION.md
 
   src/
@@ -135,6 +172,11 @@ banking-support-agent/
         exceptions.py
         schemas.py
 
+      database/
+        connection.py
+        models.py
+        repositories.py
+
       generation/
         llm_client.py
         prompt_builder.py
@@ -142,8 +184,13 @@ banking-support-agent/
       routing/
         router.py
 
+      security/
+        prompt_safety.py
+        sensitive_data.py
+
       services/
         agent_service.py
+        database_workflow_service.py
         workflow_service.py
 
       tools/
@@ -163,6 +210,8 @@ banking-support-agent/
         run_agent.py
 
   tests/
+  alembic.ini
+  docker-compose.yml
   Dockerfile
   requirements.txt
   requirements-docker.txt
@@ -196,11 +245,14 @@ APP_NAME=Banking Support Agent
 ENVIRONMENT=development
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-2.5-flash
+
+WORKFLOW_STORAGE_BACKEND=memory
+DATABASE_URL=postgresql+psycopg://banking_agent:banking_agent_password@localhost:5432/banking_agent
 ```
 
 The `.env` file is ignored by Git and should not be committed.
 
-Start the API:
+Start the API in memory mode:
 
 ```bash
 PYTHONPATH=src python -m uvicorn banking_agent.api.app:app --reload
@@ -239,6 +291,54 @@ http://127.0.0.1:8000/ui
 ```
 
 For deterministic mode only, the app can also run without a Gemini key if `use_llm=false` is used in requests.
+
+## Run with PostgreSQL using Docker Compose
+
+Start PostgreSQL:
+
+```bash
+docker compose up -d postgres
+```
+
+Run database migrations:
+
+```bash
+docker compose run --rm app alembic upgrade head
+```
+
+Start the app with the PostgreSQL backend:
+
+```bash
+docker compose up --build app
+```
+
+The app is available at:
+
+```text
+http://127.0.0.1:8000
+```
+
+Useful checks:
+
+```bash
+curl --fail http://127.0.0.1:8000/health
+curl --fail http://127.0.0.1:8000/ui
+curl -s http://127.0.0.1:8000/workflows
+```
+
+The Docker Compose setup runs:
+
+```text
+FastAPI app container
+PostgreSQL database container
+PostgreSQL Docker volume
+```
+
+The app container connects to PostgreSQL using the Compose service hostname:
+
+```text
+postgres
+```
 
 ## Example Workflow Demo
 
@@ -281,13 +381,83 @@ workflow.status = completed
 dispute_ticket_id = DSP-TX1001
 ```
 
-## Testing
+## PostgreSQL Persistence Demo
 
-Run all tests:
+When running with Docker Compose, create a workflow and list workflows:
 
 ```bash
-pytest
+curl -s http://127.0.0.1:8000/workflows
 ```
+
+Restart the app container:
+
+```bash
+docker compose restart app
+```
+
+List workflows again:
+
+```bash
+curl -s http://127.0.0.1:8000/workflows
+```
+
+If the workflow still appears after the app container restarts, the workflow is being persisted in PostgreSQL rather than only in application memory.
+
+Inspect database rows directly:
+
+```bash
+docker compose exec postgres psql -U banking_agent -d banking_agent -c "SELECT workflow_id, issue_type, status, created_at FROM workflows ORDER BY created_at DESC;"
+```
+
+Inspect audit events:
+
+```bash
+docker compose exec postgres psql -U banking_agent -d banking_agent -c "SELECT event_id, workflow_id, event_type, created_at FROM workflow_events ORDER BY created_at ASC;"
+```
+
+## Database Design
+
+The PostgreSQL backend uses two main tables:
+
+```text
+workflows
+workflow_events
+```
+
+The `workflows` table stores the current state of each support workflow.
+
+The `workflow_events` table stores the audit trail for each workflow.
+
+The relationship is:
+
+```text
+one workflow → many workflow events
+```
+
+The schema includes:
+
+```text
+primary keys
+foreign key relationship
+CHECK constraints aligned with app Literals
+JSONB event metadata
+indexes for common query patterns
+timestamp fields
+```
+
+The backend stores masked user requests to reduce the risk of persisting sensitive identifiers entered by users.
+
+More detail is available in [docs/DATABASE.md](docs/DATABASE.md).
+
+## Testing
+
+Run the standard test suite:
+
+```bash
+PYTHONPATH=src pytest -q
+```
+
+The standard test suite uses fast deterministic tests and skips database integration tests unless explicitly enabled.
 
 The tests cover:
 
@@ -295,14 +465,47 @@ The tests cover:
 - tool behaviour
 - agent service behaviour
 - prompt building
+- prompt safety checks
+- sensitive-data masking
 - confirmation-gated actions
 - workflow state transitions
 - workflow audit events
 - workflow API endpoints
 - frontend route loading
 - FastAPI response schemas
+- database-backed workflow service behaviour through opt-in integration tests
 
 Tests do not call Gemini. Fake clients and deterministic responses are used where needed.
+
+### PostgreSQL Integration Tests
+
+Start PostgreSQL:
+
+```bash
+docker compose up -d postgres
+```
+
+Run migrations if required:
+
+```bash
+docker compose run --rm app alembic upgrade head
+```
+
+Run database integration tests from the host machine:
+
+```bash
+export RUN_DATABASE_TESTS=1
+export DATABASE_URL="postgresql+psycopg://banking_agent:banking_agent_password@localhost:5432/banking_agent"
+
+PYTHONPATH=src pytest -q tests/test_database_workflow_service.py
+```
+
+Unset the environment variables after testing:
+
+```bash
+unset RUN_DATABASE_TESTS
+unset DATABASE_URL
+```
 
 ## CI/CD
 
@@ -318,6 +521,28 @@ GitHub Actions runs:
 
 The Docker image uses a smaller runtime-specific `requirements-docker.txt` file to avoid installing unnecessary development dependencies in the container.
 
+## Security and Responsible AI
+
+This project includes safety-oriented design choices for banking-style AI workflows:
+
+```text
+deterministic routing
+typed tool outputs
+confirmation-gated actions
+tool-result grounding
+audit event tracking
+sensitive-data masking
+runtime secret configuration
+database CHECK constraints
+controlled workflow state transitions
+```
+
+The LLM is not allowed to independently execute tools or perform actions. Python controls routing, tool selection, workflow state, confirmation requirements, and action execution.
+
+Sensitive values should not be committed to the repository. Use `.env.example` for placeholders and `.env` for local private values.
+
+More detail is available in [docs/SECURITY_AND_RESPONSIBLE_AI.md](docs/SECURITY_AND_RESPONSIBLE_AI.md).
+
 ## Portfolio Summary
 
 This project shows how to design a controlled AI workflow system rather than an uncontrolled chatbot. It demonstrates:
@@ -326,32 +551,40 @@ This project shows how to design a controlled AI workflow system rather than an 
 - deterministic routing
 - human/user confirmation gates
 - workflow state management
+- durable PostgreSQL workflow persistence
 - audit event tracking
+- SQLAlchemy repository design
+- Alembic database migrations
 - FastAPI API design
 - browser-based demo UI
-- Docker packaging
+- Docker and Docker Compose packaging
 - CI/CD validation
+- integration testing for database-backed workflows
 
 ## Limitations and Future Improvements
 
-This project uses mock banking tools and in-memory workflow state for demonstration.
+This project uses mock banking tools and sample workflow data for demonstration. It is designed to show AI application engineering, controlled tool use, workflow automation, database persistence, and cloud/container readiness.
 
 In a production banking environment, the system would require:
 
-- persistent database storage
-- authentication and role-based access control
-- audit-log persistence
-- permission checks before actions
-- monitoring and alerting
-- human handoff workflows
-- integration with real core banking, CRM, or case-management systems
-- stricter data-governance and PII controls
+- real authentication and role-based access control
+- integration with approved banking systems, CRM, case-management, or core banking platforms
+- stronger permission checks before action execution
+- production-grade audit logging and retention policies
+- monitoring, alerting, and incident response
+- human handoff and escalation workflows
+- encryption and stricter secrets management
+- formal data-governance and PII handling controls
+- regulatory and compliance review
+- production deployment infrastructure and environment separation
 
 Future improvements could include:
 
-- persistent workflow storage with SQLite/PostgreSQL
-- a richer workflow dashboard
-- stronger policy checks before action execution
+- AWS RDS PostgreSQL deployment
 - role-based workflow approval
+- richer workflow dashboard
+- stronger policy checks before action execution
 - conversation history
-- deployment to a cloud container service
+- production monitoring and alerting
+- infrastructure as code
+- full cloud deployment with managed database persistence
