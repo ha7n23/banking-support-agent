@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: banking_agent
+      POSTGRES_PASSWORD: banking_agent_password
+      POSTGRES_DB: banking_agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U banking_agent -d banking_agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+    environment:
+      APP_NAME: Banking Support Agent
+      ENVIRONMENT: development
+      WORKFLOW_STORAGE_BACKEND: postgres
+      DATABASE_URL: postgresql+psycopg://banking_agent:banking_agent_password@postgres:5432/banking_agent
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

@@ -14,6 +14,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install --upgrade pip && \
     python -m pip install -r requirements-docker.txt
 
+COPY alembic.ini ./alembic.ini
+COPY alembic/ ./alembic/    
 COPY src/ ./src/
 
 EXPOSE 8000
