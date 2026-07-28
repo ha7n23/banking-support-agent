@@ -121,6 +121,7 @@ The LLM does not control tools directly. It only writes the final response from 
 - [Security and Responsible AI](docs/SECURITY_AND_RESPONSIBLE_AI.md)
 - [PostgreSQL Database](docs/DATABASE.md)
 - [AWS Deployment](cloud_deployment_docs/aws/DEPLOYMENT.md)
+- [AWS Deployment with RDS(PostgreSQL)](cloud_deployment_docs/aws/DEPLOYMENT_RDS.md)
 
 ## Tech Stack
 
