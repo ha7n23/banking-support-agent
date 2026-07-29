@@ -1,25 +1,26 @@
-# Database-Backed Workflow Storage
-
-This project supports durable workflow persistence using PostgreSQL. The application can run with either an in-memory workflow backend for lightweight development or a PostgreSQL-backed workflow backend for production-style persistence.
+# PostgreSQL Workflow Persistence
 
 ## Overview
 
-The support-agent manages controlled banking support workflows, including:
+The Banking Support Agent supports durable workflow persistence using PostgreSQL. The application can run with either an in-memory workflow backend for lightweight development or a PostgreSQL-backed backend for durable state and audit history.
+
+The workflow layer manages:
 
 ```text
 workflow creation
 workflow status transitions
-human-in-the-loop confirmation
+human/user confirmation gates
+action execution
 audit events
 dispute ticket references
 timestamps
 ```
 
-The original in-memory workflow service is still supported for fast local development and unit testing. PostgreSQL adds durable storage so workflows and audit events can survive application restarts.
+The in-memory backend is still useful for fast development and unit tests. The PostgreSQL backend stores workflow records and audit events so they survive application and container restarts.
 
 ## Storage Backends
 
-The workflow storage backend is selected using:
+The backend is selected by environment variable:
 
 ```env
 WORKFLOW_STORAGE_BACKEND=memory
@@ -33,30 +34,36 @@ WORKFLOW_STORAGE_BACKEND=postgres
 
 ### Memory Backend
 
-The memory backend stores workflow data inside the running Python process.
-
 ```env
 WORKFLOW_STORAGE_BACKEND=memory
 ```
 
-This mode is useful for:
+Use this mode for:
 
 ```text
 fast local development
 unit tests
-simple demos
-running the app without PostgreSQL
+running without a database
+simple deterministic demos
 ```
 
-Data stored in this mode is not durable. If the application process restarts, workflow state is lost.
+Data is stored inside the Python process. It is not durable.
 
 ### PostgreSQL Backend
 
-The PostgreSQL backend stores workflow data in a relational database.
-
 ```env
 WORKFLOW_STORAGE_BACKEND=postgres
-DATABASE_URL=postgresql+psycopg://banking_agent:banking_agent_password@postgres:5432/banking_agent
+DATABASE_URL=postgresql+psycopg://banking_agent:banking_agent_password@localhost:5432/banking_agent
+```
+
+Use this mode for:
+
+```text
+durable workflow state
+audit event persistence
+container restart persistence
+database-backed integration tests
+cloud-style deployment patterns
 ```
 
 The PostgreSQL backend uses:
@@ -70,33 +77,202 @@ PostgreSQL
 Alembic migrations
 ```
 
-In Docker Compose, the database hostname is `postgres` because containers communicate using service names.
-
-When running database integration tests from the host machine, the database hostname is usually `localhost`.
-
 ## Architecture
-
-The database-backed workflow architecture is:
 
 ```text
 FastAPI routes
-↓
-Workflow service
-↓
-Workflow repository
-↓
+        ↓
+Workflow service protocol
+        ↓
+DatabaseWorkflowService
+        ↓
+WorkflowRepository
+        ↓
 SQLAlchemy session
-↓
-psycopg driver
-↓
+        ↓
 PostgreSQL database
+        ↓
+workflows + workflow_events tables
 ```
 
-The service layer handles workflow rules and status transitions.
+The API layer depends on a workflow service protocol rather than a concrete storage class. This lets the application switch between memory and PostgreSQL without changing endpoint behaviour.
 
-The repository layer handles database reads and writes.
+## Database Package
 
-Database transactions are controlled at the service layer so workflow state changes and audit event inserts can be committed together.
+```text
+src/banking_agent/database/
+  connection.py
+  models.py
+  repositories.py
+```
+
+### `connection.py`
+
+Responsible for:
+
+```text
+creating the SQLAlchemy engine lazily
+creating the session factory
+providing database sessions
+failing clearly when DATABASE_URL is missing in postgres mode
+```
+
+### `models.py`
+
+Defines SQLAlchemy ORM models for:
+
+```text
+WorkflowRecord
+WorkflowEventRecord
+```
+
+The models use PostgreSQL-specific types where useful, including `JSONB` for event metadata.
+
+### `repositories.py`
+
+Responsible for:
+
+```text
+saving workflow records
+saving workflow event records
+loading workflow state
+loading workflow events
+converting between Pydantic domain models and SQLAlchemy records
+```
+
+The repository uses `flush()` but does not control transaction commits. The service layer controls commit/rollback so workflow updates and related events stay consistent.
+
+## Tables
+
+### `workflows`
+
+Stores the current state of each workflow.
+
+Key columns:
+
+```text
+workflow_id
+user_request
+customer_id
+issue_type
+transaction_id
+status
+requires_confirmation
+recommended_action
+created_at
+updated_at
+failure_reason
+dispute_ticket_id
+```
+
+Notes:
+
+- `workflow_id` uses the app's readable `WF-...` identifier format.
+- `user_request` stores masked text rather than raw sensitive input.
+- `issue_type` and `status` are constrained to valid application values.
+- `transaction_id` can store values such as `TX1001`.
+- `dispute_ticket_id` can store values such as `DSP-TX1001` after completion.
+
+### `workflow_events`
+
+Stores the audit trail for workflow actions and transitions.
+
+Key columns:
+
+```text
+event_id
+workflow_id
+event_type
+message
+metadata
+created_at
+```
+
+Notes:
+
+- `workflow_id` references `workflows.workflow_id`.
+- `event_type` is constrained to valid application event types.
+- `metadata` is stored as PostgreSQL `JSONB` because event details vary by event type.
+- Event messages and metadata values are masked where appropriate.
+
+## Relationship
+
+```text
+one workflow → many workflow events
+```
+
+A workflow can have events such as:
+
+```text
+workflow_created
+intent_classified
+tool_called
+confirmation_required
+user_confirmed
+action_completed
+action_rejected
+workflow_failed
+```
+
+## Constraints and Integrity
+
+The database schema includes:
+
+```text
+primary keys
+foreign key relationship
+CHECK constraints for issue_type
+CHECK constraints for workflow status
+CHECK constraints for event_type
+indexes for workflow_id, status, issue_type, and created_at
+```
+
+The application validates data through Pydantic and Python domain models. PostgreSQL also enforces important integrity rules at the database layer.
+
+This gives two layers of protection:
+
+```text
+Application layer validation
+        +
+Database layer constraints
+```
+
+## Alembic Migrations
+
+Migration files are stored in:
+
+```text
+alembic/versions/
+```
+
+Current migration:
+
+```text
+001_create_workflow_tables.py
+```
+
+Run migrations locally:
+
+```bash
+docker compose run --rm app alembic upgrade head
+```
+
+Or from an environment with access to the configured database:
+
+```bash
+alembic upgrade head
+```
+
+The migration creates:
+
+```text
+workflows table
+workflow_events table
+foreign key relationship
+CHECK constraints
+indexes
+JSONB metadata column
+```
 
 ## Local Docker Compose Setup
 
@@ -106,13 +282,13 @@ Start PostgreSQL:
 docker compose up -d postgres
 ```
 
-Run database migrations:
+Run migrations:
 
 ```bash
 docker compose run --rm app alembic upgrade head
 ```
 
-Start the application with the PostgreSQL backend:
+Start the app with PostgreSQL:
 
 ```bash
 docker compose up --build app
@@ -132,14 +308,18 @@ curl --fail http://127.0.0.1:8000/ui
 curl -s http://127.0.0.1:8000/workflows
 ```
 
-## Proving Persistence
+## Persistence Validation
 
-Create a workflow through the API:
+Create a workflow:
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/support \
+curl -X POST "http://127.0.0.1:8000/support" \
   -H "Content-Type: application/json" \
-  -d '{"user_request":"Please raise a dispute for TX1001.","use_llm":false,"confirm_action":false}'
+  -d '{
+    "user_request": "Please raise a dispute for TX1001.",
+    "use_llm": false,
+    "confirm_action": false
+  }'
 ```
 
 List workflows:
@@ -148,7 +328,7 @@ List workflows:
 curl -s http://127.0.0.1:8000/workflows
 ```
 
-Restart the application container:
+Restart the app container:
 
 ```bash
 docker compose restart app
@@ -160,7 +340,7 @@ List workflows again:
 curl -s http://127.0.0.1:8000/workflows
 ```
 
-If the workflow is still returned after the application container restarts, workflow data is being persisted in PostgreSQL rather than only in application memory.
+If the same workflow remains visible after restart, state is being loaded from PostgreSQL.
 
 ## Direct PostgreSQL Checks
 
@@ -176,168 +356,13 @@ Inspect audit events:
 docker compose exec postgres psql -U banking_agent -d banking_agent -c "SELECT event_id, workflow_id, event_type, created_at FROM workflow_events ORDER BY created_at ASC;"
 ```
 
-## Database Schema
-
-The first database schema includes two core tables:
-
-```text
-workflows
-workflow_events
-```
-
-### `workflows`
-
-The `workflows` table stores the current state of each support workflow.
-
-Key columns:
-
-```text
-workflow_id
-user_request
-customer_id
-issue_type
-transaction_id
-status
-requires_confirmation
-recommended_action
-failure_reason
-dispute_ticket_id
-created_at
-updated_at
-```
-
-The `workflow_id` column is the primary key.
-
-The `user_request` column stores masked text rather than raw sensitive user input. This reduces the risk of persisting personally identifiable information or sensitive identifiers.
-
-### `workflow_events`
-
-The `workflow_events` table stores the audit trail for each workflow.
-
-Key columns:
-
-```text
-event_id
-workflow_id
-event_type
-message
-metadata
-created_at
-```
-
-The `event_id` column is the primary key.
-
-The `workflow_id` column is a foreign key referencing `workflows.workflow_id`.
-
-The `metadata` column uses PostgreSQL `JSONB` because audit event details can vary by event type.
-
-## Relationship Between Tables
-
-The relationship is:
-
-```text
-one workflow → many workflow events
-```
-
-A workflow can have multiple audit events, such as:
-
-```text
-workflow_created
-confirmation_required
-user_confirmed
-action_completed
-workflow_failed
-```
-
-The `workflow_events.workflow_id` foreign key ensures that audit events cannot exist without a valid parent workflow.
-
-## Constraints
-
-The database includes `CHECK` constraints aligned with the application's allowed literal values.
-
-Protected fields include:
-
-```text
-workflow status
-issue type
-workflow event type
-```
-
-This prevents invalid database states such as:
-
-```text
-status = almost_done
-issue_type = random_issue
-event_type = unknown_event
-```
-
-The application validates data at the Python layer, while PostgreSQL enforces key integrity rules at the database layer.
-
-## Indexes
-
-The schema includes indexes for common workflow queries:
-
-```text
-workflow status
-issue type
-created_at
-workflow event timeline by workflow_id and created_at
-```
-
-These indexes support operations such as:
-
-```text
-listing newest workflows
-filtering by workflow status
-filtering by issue type
-retrieving a workflow audit timeline
-```
-
-Indexes are used selectively to support important read patterns without adding unnecessary write overhead.
-
-## Migrations
-
-Alembic manages database schema changes.
-
-The first migration creates:
-
-```text
-workflows table
-workflow_events table
-foreign key relationship
-CHECK constraints
-indexes
-```
-
-Run migrations with:
+Check table list:
 
 ```bash
-docker compose run --rm app alembic upgrade head
+docker compose exec postgres psql -U banking_agent -d banking_agent -c "\dt"
 ```
 
-If the local PostgreSQL volume is deleted, migrations must be run again before using the PostgreSQL backend.
-
-## Transactions
-
-Workflow state changes and audit event inserts are handled transactionally.
-
-For example, completing a workflow requires:
-
-```text
-updating the workflow status
-setting the dispute ticket ID when applicable
-inserting an action_completed audit event
-```
-
-These operations should either succeed together or fail together. This prevents inconsistent workflow history, such as a completed workflow with no corresponding audit event.
-
-## Running Tests
-
-Run the standard test suite:
-
-```bash
-PYTHONPATH=src pytest -q
-```
+## Database Integration Tests
 
 Database integration tests are opt-in because they require PostgreSQL.
 
@@ -347,13 +372,13 @@ Start PostgreSQL:
 docker compose up -d postgres
 ```
 
-Run migrations if required:
+Run migrations:
 
 ```bash
 docker compose run --rm app alembic upgrade head
 ```
 
-Run database integration tests from the host machine:
+Run integration tests:
 
 ```bash
 export RUN_DATABASE_TESTS=1
@@ -362,16 +387,60 @@ export DATABASE_URL="postgresql+psycopg://banking_agent:banking_agent_password@l
 PYTHONPATH=src pytest -q tests/test_database_workflow_service.py
 ```
 
-Unset the environment variables after testing:
+Unset the variables afterwards:
 
 ```bash
 unset RUN_DATABASE_TESTS
 unset DATABASE_URL
 ```
 
-## Cleanup
+These tests validate:
 
-Stop containers while keeping database data:
+```text
+workflow persistence
+workflow event persistence
+status transitions
+completed action flow
+invalid transition behaviour
+unknown workflow handling
+```
+
+## Masking and Sensitive Data Handling
+
+The PostgreSQL backend stores masked user requests instead of raw sensitive text.
+
+This matters because banking support requests may contain:
+
+```text
+card numbers
+account numbers
+CNICs
+long numeric identifiers
+password-like strings
+API keys
+```
+
+The masking layer reduces accidental exposure in stored workflow records, API responses, and UI output. It is a lightweight project-level control, not a replacement for enterprise PII governance.
+
+## Transaction Handling
+
+The database workflow service controls transaction boundaries.
+
+Typical pattern:
+
+```text
+load workflow
+validate transition
+update workflow
+add event
+commit
+```
+
+If an error occurs, the service rolls back the session so partial updates are not persisted.
+
+## Local Cleanup
+
+Stop containers:
 
 ```bash
 docker compose down
@@ -383,36 +452,29 @@ Stop containers and delete the local PostgreSQL volume:
 docker compose down -v
 ```
 
-Use `down -v` carefully because it deletes the local PostgreSQL data volume.
+Use `down -v` carefully because it deletes local PostgreSQL data.
 
-## Security and Privacy
+## Cloud Deployment Notes
 
-The PostgreSQL backend stores masked user requests instead of raw sensitive user text.
+The same PostgreSQL backend can run against managed PostgreSQL by setting `DATABASE_URL` to the managed database connection string and running Alembic migrations before the app uses the database.
 
-Sensitive values and environment-specific credentials should not be committed to GitHub.
-
-Use `.env.example` for placeholders and documentation.
-
-Use `.env` for local private values.
-
-The `.env` file should remain ignored by Git.
-
-## Production Considerations
-
-This local PostgreSQL setup is designed for development and portfolio demonstration.
-
-A production deployment would require additional controls, such as:
+The AWS RDS deployment documentation is kept separately in:
 
 ```text
-managed database hosting
-private database networking
-secure secret management
-database backups
-migration strategy
-role-based access control
-monitoring and alerting
-log retention policies
-PII handling policy
+cloud_deployment_docs/aws/DEPLOYMENT_RDS.md
 ```
 
-For AWS deployment, PostgreSQL would typically be hosted using Amazon RDS for PostgreSQL, with database credentials managed securely and database access restricted to the application layer.
+That deployment uses Amazon RDS for PostgreSQL, ECS Fargate, ECR, Secrets Manager, CloudWatch, and an Application Load Balancer.
+
+## Limitations
+
+This database design is appropriate for a focused AI workflow engineering project. A production banking deployment would need additional controls such as:
+
+- production authentication and authorization,
+- tenant/account ownership checks,
+- migration automation and rollback planning,
+- stronger encryption and key management policies,
+- production monitoring and alerting,
+- audit log retention policies,
+- formal PII classification and retention rules,
+- backup and disaster recovery processes.

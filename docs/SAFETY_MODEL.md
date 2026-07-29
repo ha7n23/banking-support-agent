@@ -2,11 +2,11 @@
 
 ## Overview
 
-This project is designed around a controlled agent safety model.
+The Banking Support Agent is designed around a controlled agent safety model.
 
-The agent does not freely decide and execute arbitrary actions. Python controls routing, tool execution, confirmation gates, workflow state, and audit events.
+The agent does not freely decide or execute arbitrary actions. Python controls routing, tool execution, confirmation gates, workflow state, audit events, and persistence.
 
-The LLM is optional and is used only as a final response writer.
+The LLM is optional and is used only as a final response writer after controlled tool execution.
 
 ## Core Principle
 
@@ -15,6 +15,7 @@ Read-only tools can run automatically.
 Decision-support tools can run automatically.
 Action tools require explicit confirmation.
 Workflow actions are tracked and audited.
+Workflow state can be persisted in PostgreSQL.
 ```
 
 ## Tool Categories
@@ -46,7 +47,7 @@ This can run automatically because it does not create or update anything.
 
 ### Action Tools
 
-Action tools change state or trigger workflows.
+Action tools change state or trigger a support action.
 
 Example:
 
@@ -65,7 +66,6 @@ the user requested a dispute action
 the transaction was checked
 policy context was retrieved
 eligibility was checked
-the case is eligible
 the action was confirmed
 ```
 
@@ -73,164 +73,155 @@ Without confirmation, the agent may investigate and explain, but it will not cre
 
 ## Workflow Safety
 
-Action-oriented support requests can create a workflow.
+Action-oriented requests can create a workflow.
 
 A workflow records:
 
 ```text
-workflow ID
-issue type
-transaction ID
+workflow_id
+issue_type
+transaction_id
 status
-recommended action
-confirmation requirement
-dispute ticket ID if completed
-failure reason if failed
+requires_confirmation
+recommended_action
+dispute_ticket_id
+timestamps
 ```
 
-This prevents action execution from being hidden inside a single chatbot response.
-
-## Safe Workflow Transitions
-
-Workflow status changes go through controlled service methods.
-
-Examples:
+Workflow statuses are controlled:
 
 ```text
-awaiting_confirmation → approved
-awaiting_confirmation → rejected
-approved → completed
-awaiting_confirmation → execute → completed
+created
+awaiting_confirmation
+approved
+completed
+rejected
+failed
 ```
 
-Invalid transitions raise controlled errors.
-
-This protects against cases such as:
-
-```text
-executing a rejected workflow
-confirming a workflow that is not awaiting confirmation
-completing a workflow before approval
-failing a completed workflow
-```
+Invalid transitions are rejected by application logic.
 
 ## Audit Events
 
-Every important workflow step creates an audit event.
+The system records audit events for workflow activity.
 
 Examples:
 
 ```text
 workflow_created
-confirmation_required
 intent_classified
 tool_called
+confirmation_required
 user_confirmed
 action_completed
 action_rejected
 workflow_failed
 ```
 
-This supports traceability and debugging.
+Audit events help explain what happened and why a workflow moved to a given state.
 
-In production, these events would be persisted in a database or audit log service.
+## PostgreSQL Persistence Safety
 
-## Why This Matters
+When `WORKFLOW_STORAGE_BACKEND=postgres`, workflows and events are stored in PostgreSQL.
 
-In banking and fintech, unsafe action execution can cause serious issues.
+Safety-relevant database controls include:
 
-Examples of risky actions:
+- masked `user_request` persistence,
+- valid workflow status constraints,
+- valid issue type constraints,
+- valid event type constraints,
+- foreign key relationship between workflows and events,
+- durable audit history across app restarts.
 
-```text
-creating a support ticket without consent
-blocking a card
-sending a message
-changing account information
-initiating a refund
-modifying customer records
-```
+The database does not replace application-level safety logic. It adds persistence and integrity checks behind the controlled workflow service.
 
-This project demonstrates a safer pattern:
+## Sensitive Data Masking
 
-```text
-investigate automatically
-ask for confirmation before action
-execute only after confirmation
-record the workflow history
-```
+The project includes lightweight masking for sensitive identifiers in API/UI output and stored workflow requests.
 
-## LLM Safety Boundary
-
-The LLM does not control tools.
-
-The workflow is:
+Examples of sensitive input patterns include:
 
 ```text
-Python router decides route
-tools execute under Python control
-workflow service tracks action state
-tool results are collected
-LLM writes final response only if enabled
+CNIC-like values
+long card/account-like numbers
+password-like strings
+API-key-like strings
 ```
 
-The prompt tells the LLM to:
+The goal is to reduce accidental exposure in responses, UI output, and persisted workflow records.
 
-- use only tool results
-- avoid inventing policy details
-- avoid inventing transaction facts
-- avoid claiming a ticket was created unless the action tool confirms it
-- explain confirmation requirements when an action was requested but not confirmed
+This is not a full enterprise PII detection system.
+
+## Prompt Safety Checks
+
+The project checks for unsafe prompt patterns such as:
+
+- asking the system to ignore previous instructions,
+- asking to bypass confirmation,
+- asking to avoid audit logging,
+- asking to reveal hidden system instructions.
+
+Unsafe requests can be marked high risk and blocked before tool execution.
+
+## LLM Boundary
+
+Gemini may be used to write the final response.
+
+Gemini does not:
+
+- choose tools,
+- execute tools,
+- create dispute tickets,
+- update workflow state,
+- approve actions,
+- bypass safety checks.
+
+The response writer receives completed tool results and workflow state. It should not invent outcomes that tools did not return.
 
 ## Deterministic Mode
 
-The project can run without an LLM.
+The app can run with:
 
-In deterministic mode, Python builds the final response from tool results.
+```json
+{
+  "use_llm": false
+}
+```
 
-This is useful for:
+This mode is useful for:
 
-- testing
-- debugging
-- CI
-- safe fallback behaviour
-- running without API keys
+- tests,
+- demos without API keys,
+- reproducible behaviour,
+- CI environments.
 
-## LLM-Assisted Mode
+Tests use fake clients and deterministic responses rather than live Gemini calls.
 
-In LLM-assisted mode, Gemini writes the final response.
+## Not a Production Banking System
 
-The tool execution and workflow state remain controlled by Python.
+This project uses mock data and mock tools. It does not connect to real banking systems, real customer accounts, real dispute operations, or live financial infrastructure.
 
-This gives better language quality without giving the LLM full autonomy.
+A production banking system would need:
 
-## Mock Data and No Real Actions
+- strong authentication and authorization,
+- account ownership checks,
+- production-grade audit logging,
+- enterprise PII detection and retention controls,
+- fraud/compliance review,
+- human escalation workflows,
+- monitoring and incident response,
+- formal model and prompt governance.
 
-The project uses mock tools and mock transaction data.
+## Summary
 
-This avoids:
+The safety model is based on separation of responsibilities:
 
-- real customer data
-- real banking APIs
-- accidental real actions
-- API costs during tests
-- compliance risk from using private data
-
-The architecture can later be adapted to real APIs by replacing mock tool implementations while keeping the same safety boundaries.
-
-## Production Safeguards Needed Later
-
-For a real banking environment, the system would need:
-
-- authentication
-- role-based access control
-- customer identity verification
-- permission checks before actions
-- persistent audit logs
-- monitoring and alerting
-- PII masking
-- rate limits
-- human escalation workflows
-- data retention controls
-- production incident handling
-
-The current project is a safe, mock implementation that demonstrates the architecture and safety pattern.
+```text
+Python controls behaviour.
+Tools return structured facts.
+Actions require confirmation.
+Workflows preserve state.
+Events preserve audit history.
+PostgreSQL can persist that history.
+The LLM only writes grounded final responses.
+```
